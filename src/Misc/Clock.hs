@@ -1,8 +1,7 @@
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE InstanceSigs               #-}
-
-module Misc.Clock where
+module Misc.Clock (Clock) where
 
 import qualified Data.VectorClock as VC
 import           Misc.Pid         (Pid (..))
