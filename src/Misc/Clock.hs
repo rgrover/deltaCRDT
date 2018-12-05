@@ -6,8 +6,8 @@ module Misc.Clock (Clock) where
 import qualified Data.VectorClock as VC
 import           Misc.Pid         (Pid (..))
 
-import           Algebra.Lattice  (BoundedJoinSemiLattice,
-                                   JoinSemiLattice, bottom, (\/))
+import           Algebra.Lattice  (BoundedJoinSemiLattice, JoinSemiLattice,
+                                   bottom, (\/))
 
 import           Data.Word        (Word64)
 

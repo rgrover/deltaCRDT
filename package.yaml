@@ -24,6 +24,7 @@ dependencies:
 - base >= 4.7 && < 5
 - vector-clock
 - lattices
+- containers
 
 library:
   source-dirs: src
