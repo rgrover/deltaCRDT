@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE InstanceSigs               #-}
-module Misc.Clock (Clock) where
+module Misc.VectorClock (VectorClock) where
 
 import qualified Data.VectorClock as VC
 import           Misc.Pid         (Pid (..))
@@ -17,12 +17,12 @@ newtype EventCount =
     deriving (Eq, Ord, Show, Num)
 
 -- type of vector-clock to help establish causal dependency
-type Clock = VC.VectorClock Pid EventCount
+type VectorClock = VC.VectorClock Pid EventCount
 
-instance JoinSemiLattice Clock where
-    (\/) :: Clock -> Clock -> Clock
+instance JoinSemiLattice VectorClock where
+    (\/) :: VectorClock -> VectorClock -> VectorClock
     (\/) = VC.max
 
-instance BoundedJoinSemiLattice Clock where
-    bottom :: Clock
+instance BoundedJoinSemiLattice VectorClock where
+    bottom :: VectorClock
     bottom = VC.empty
