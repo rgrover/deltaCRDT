@@ -82,13 +82,30 @@ class CvRDT s => DeltaCvRDT s where
         clock'  = increment clock ownId
         deltas' = deltas Seq.|> (clock', d)
 
-    onReceive :: Message s -> AggregateState s -> AggregateState s
-    onReceive (Ack remoteId receivedRemoteClock) aggregateState =
+    onReceive :: Pid -> Message s -> AggregateState s -> AggregateState s
+    onReceive _ (Ack senderId receivedRemoteClock) aggregateState =
         aggregateState {getAckMap = aMap'}
       where
-        aMap = getAckMap aggregateState
-        aMap' = Map.insertWith VC.max remoteId receivedRemoteClock aMap
-    onReceive (Delta remoteId (deltas)) aggregateState = undefined
+        aMap  = getAckMap aggregateState
+        aMap' = updateAckMap senderId receivedRemoteClock aMap
+    onReceive ownId (Delta senderId deltas) aggregateState =
+        case Seq.viewr deltas of
+            Seq.EmptyR -> aggregateState -- no deltas received
+            _ Seq.:> (latestClock, _) ->
+                if latestClock <= ownClock
+                    then aggregateState -- deltas contain nothing new
+                    else AggregateState
+                         { getS = undefined
+                         , getClock = ownClock'
+                         , getDeltas = undefined
+                         , getAckMap = updateAckMap senderId latestClock aMap
+                         }
+      where
+          x         = getS aggregateState
+          ownClock  = getClock aggregateState
+          deltas    = getDeltas aggregateState
+          ownClock' = increment ownClock ownId
+          aMap      = getAckMap aggregateState
 
     periodicSendTo :: AggregateState s -> Pid -> DeltaInterval s
     periodicSendTo = undefined
@@ -109,7 +126,6 @@ type DeltaInterval s = Seq.Seq (VectorClock, s)
 -- Note: this map may be held in volatile storage.
 type AcknowledgementMap = Map.Map Pid VectorClock
 
--- Application facing state
 data AggregateState s where
     AggregateState ::
          --DeltaCvRDT s => TODO: hindent fails to parse this: find workaround
@@ -130,3 +146,8 @@ data Message s
 
 deltasFollowing :: VectorClock -> DeltaInterval s -> DeltaInterval s
 deltasFollowing c deltas = undefined
+
+-- helper function to update the AcknowledgementMap
+updateAckMap ::
+       Pid -> VectorClock -> AcknowledgementMap -> AcknowledgementMap
+updateAckMap id clock aMap = Map.insertWith VC.max id clock aMap

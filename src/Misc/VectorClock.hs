@@ -29,6 +29,9 @@ instance BoundedJoinSemiLattice VectorClock where
     bottom :: VectorClock
     bottom = VC.empty
 
+instance Ord VectorClock where
+    c1 <= c2 = (c1 == c2) || (c1 `VC.relation` c2 == VC.Causes)
+
 increment :: VectorClock -> Pid -> VectorClock
 increment c ownId = VC.incWithDefault ownId c 0
 
