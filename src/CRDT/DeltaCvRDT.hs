@@ -26,7 +26,6 @@ import           Control.Monad.Trans.State.Strict as S
 --
 --  s :: CRDT state forming a semilattice, where modifications are
 --          inflationary and join is conflict-free.
---  p :: identifier for the local process
 --  o :: identifier for operations permitted on state
 --  k :: key--i.e. an identifier for some element within state
 --  v :: result of querying state with a key
@@ -34,9 +33,9 @@ import           Control.Monad.Trans.State.Strict as S
 -- In a δ-CRDT, the effect of applying a mutation, represented by a
 -- delta-mutation δ = mδ(X), is decoupled from the resulting state X′ = X ⊔ δ,
 -- which allows shipping this δ rather than the entire resulting state X′
-class CvRDT s p o k v =>
-      DeltaCvRDT s p o k v
-    | s -> p o k v
+class CvRDT s o k v =>
+      DeltaCvRDT s o k v
+    | s -> o k v
     where
     -- A delta-mutator mδ is a function, corresponding  to  an  update
     -- operation,  which  takes  a  state X in  a  join-semilattice S as
@@ -76,7 +75,7 @@ type AcknowledgementMap = Map.Map Pid VectorClock
 -- Application facing state
 data AggregateState s where
     AggregateState
-        :: DeltaCvRDT s p o k v
+        :: DeltaCvRDT s o k v
         => ( s                  -- main CRDT state
            , VectorClock        -- local vector-clock
            , DeltaInterval s    -- delta-group pending dissemination
@@ -88,7 +87,7 @@ data MessageType
     = Delta
     | Ack
 
-initDeltaCvRDTState :: DeltaCvRDT s p o k v => AggregateState s
+initDeltaCvRDTState :: DeltaCvRDT s o k v => AggregateState s
 initDeltaCvRDTState =
     AggregateState (bottom, bottom, DeltaInterval Seq.empty, Map.empty)
 
