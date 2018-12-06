@@ -124,7 +124,7 @@ type DeltaInterval s = Seq.Seq (VectorClock, s)
 -- neighbor j, the largest clock b for all delta-intervals
 -- acknowledged by j. Ai[i] should match a process's own vector clock.
 -- Note: this map may be held in volatile storage.
-type AcknowledgementMap = Map.Map Pid VectorClock
+type AckMap = Map.Map Pid VectorClock
 
 data AggregateState s where
     AggregateState ::
@@ -132,7 +132,7 @@ data AggregateState s where
              { getS      :: s
              , getClock  :: VectorClock
              , getDeltas :: DeltaInterval s
-             , getAckMap :: AcknowledgementMap
+             , getAckMap :: AckMap
              } -> AggregateState s
 
 -- A message between two processes can either hold Deltas along with
@@ -148,6 +148,5 @@ deltasFollowing :: VectorClock -> DeltaInterval s -> DeltaInterval s
 deltasFollowing c deltas = undefined
 
 -- helper function to update the AcknowledgementMap
-updateAckMap ::
-       Pid -> VectorClock -> AcknowledgementMap -> AcknowledgementMap
+updateAckMap :: Pid -> VectorClock -> AckMap -> AckMap
 updateAckMap = Map.insertWith VC.max
