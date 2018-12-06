@@ -127,34 +127,46 @@ onReceive _ (Ack senderId receivedRemoteClock) aggregateState =
     aMap' = updateAckMap senderId receivedRemoteClock aMap
 
 onReceive ownId (Delta senderId deltas) aggregateState =
-    case tailEndOfDeltas of
-        Seq.EmptyR                -> aggregateState -- no deltas received
-        _ Seq.:> (remoteClock, _) ->
-            if remoteClock <= ownClock
-                then aggregateState -- deltas contain nothing new
-                else AggregateState
-                         { getS      = undefined
-                         , getClock  = undefined
-                         , getDeltas = undefined
-                         , getAckMap =
-                               updateAckMap senderId remoteClock aMap
-                         }
+    if sendersLatestClock <= ownClock
+        then aggregateState -- deltas contain nothing new
+        else AggregateState
+                 { getS      = finalState
+                 , getClock  = finalClock
+                 , getDeltas = ownDeltas'
+                 , getAckMap = updateAckMap senderId sendersLatestClock aMap
+                 }
   where
-    x               = getS aggregateState
-    ownClock        = getClock aggregateState
-    deltas          = getDeltas aggregateState
-    ownClock'       = increment ownClock ownId
-    aMap            = getAckMap aggregateState
-    tailEndOfDeltas = Seq.viewr deltas
+    x                  = getS aggregateState
+    ownClock           = getClock aggregateState
+    ownDeltas          = getDeltas aggregateState
+    ownClock'          = increment ownClock ownId
+    aMap               = getAckMap aggregateState
+    tailEndOfDeltas    = Seq.viewr deltas
+    sendersLatestClock =
+        case tailEndOfDeltas of
+            Seq.EmptyR                -> bottom -- no deltas received
+            _ Seq.:> (remoteClock, _) -> remoteClock
+
+    unknownTo :: DeltaInterval s -> VectorClock -> DeltaInterval s
+    unknownTo ds c = Seq.dropWhileL ((<= c) . fst) ds
+    usefulDeltas   = deltas `unknownTo` ownClock
+    ownDeltas'     = ownDeltas Seq.>< usefulDeltas
+
+    (finalClock, finalState) =
+        Seq.foldlWithIndex mergeDeltaWithState (ownClock', x) usefulDeltas
+    mergeDeltaWithState ::
+           DeltaCvRDT s
+        => (VectorClock, s)
+        -> Int
+        -> (VectorClock, s)
+        -> (VectorClock, s)
+    mergeDeltaWithState c1s1 _ c2s2 = c1s1 \/ c2s2
 
 periodicSendTo :: DeltaCvRDT s => AggregateState s -> Pid -> DeltaInterval s
 periodicSendTo = undefined
 
 periodicGarbageCollect :: DeltaCvRDT s => AggregateState s -> AggregateState s
 periodicGarbageCollect = undefined
-
-deltasFollowing :: VectorClock -> DeltaInterval s -> DeltaInterval s
-deltasFollowing c deltas = undefined
 
 -- helper function to update the AcknowledgementMap
 updateAckMap :: Pid -> VectorClock -> AckMap -> AckMap
