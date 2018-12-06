@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE InstanceSigs               #-}
-module Misc.VectorClock (VectorClock) where
+module Misc.VectorClock (VectorClock, increment) where
 
 import qualified Data.VectorClock as VC
 import           Misc.Pid         (Pid (..))
@@ -26,3 +26,6 @@ instance JoinSemiLattice VectorClock where
 instance BoundedJoinSemiLattice VectorClock where
     bottom :: VectorClock
     bottom = VC.empty
+
+increment :: VectorClock -> Pid -> VectorClock
+increment c ownId = VC.incWithDefault ownId c 0
