@@ -54,68 +54,9 @@ class CvRDT s => DeltaCvRDT s where
     -- Note: Pid parameter is used for passing own process Id
     deltaMutation :: Pid -> Ops s -> KeyType s -> ValueType s -> s -> s
 
-    initDeltaCvRDTState :: DeltaCvRDT s => AggregateState s
-    initDeltaCvRDTState =
-        AggregateState
-        { getS      = bottom
-        , getClock  = bottom
-        , getDeltas = Seq.empty
-        , getAckMap = Map.empty
-        }
-
-    onOperation ::
-           Pid
-        -> Ops s
-        -> KeyType s
-        -> ValueType s
-        -> AggregateState s
-        -> AggregateState s
-    onOperation ownId op key value aggregateState =
-        aggregateState {getS = x', getClock = clock', getDeltas = deltas'}
-      where
-        x       = getS aggregateState
-        clock   = getClock aggregateState
-        deltas  = getDeltas aggregateState
-        d       = deltaMutation ownId op key value x
-        x'      = x \/ d
-        clock'  = increment clock ownId
-        deltas' = deltas Seq.|> (clock', d)
-
-    onReceive :: Pid -> Message s -> AggregateState s -> AggregateState s
-    onReceive _ (Ack senderId receivedRemoteClock) aggregateState =
-        aggregateState {getAckMap = aMap'}
-      where
-        aMap  = getAckMap aggregateState
-        aMap' = updateAckMap senderId receivedRemoteClock aMap
-    onReceive ownId (Delta senderId deltas) aggregateState =
-        case tailEndOfDeltas of
-            Seq.EmptyR                -> aggregateState -- no deltas received
-            _ Seq.:> (remoteClock, _) ->
-                if remoteClock <= ownClock
-                    then aggregateState -- deltas contain nothing new
-                    else AggregateState
-                         { getS      = undefined
-                         , getClock  = ownClock'
-                         , getDeltas = undefined
-                         , getAckMap = updateAckMap senderId remoteClock aMap
-                         }
-      where
-          x               = getS aggregateState
-          ownClock        = getClock aggregateState
-          deltas          = getDeltas aggregateState
-          ownClock'       = increment ownClock ownId
-          aMap            = getAckMap aggregateState
-          tailEndOfDeltas = Seq.viewr deltas
-
-    periodicSendTo :: AggregateState s -> Pid -> DeltaInterval s
-    periodicSendTo = undefined
-
-    periodicGarbageCollect :: AggregateState s -> AggregateState s
-    periodicGarbageCollect = undefined
-
 -- A sequence of deltas tagged with vector-clocks. This is used to
--- exchange deltas between processes, and also to maintain a local
--- copy of deltas waiting to be disseminated.
+-- exchange collections of deltas between processes, and also to
+-- maintain a local copy of deltas waiting to be disseminated.
 --
 -- Note: Delta-Intervals may be held in volatile storage.
 type DeltaInterval s = Seq.Seq (VectorClock, s)
@@ -128,7 +69,7 @@ type AckMap = Map.Map Pid VectorClock
 
 data AggregateState s where
     AggregateState ::
-         --DeltaCvRDT s => TODO: hindent fails to parse this: find workaround
+         --DeltaCvRDT s => --TODO: hindent fails to parse this: find workaround
              { getS      :: s
              , getClock  :: VectorClock
              , getDeltas :: DeltaInterval s
@@ -143,6 +84,74 @@ data Message s
             (DeltaInterval s)
     | Ack Pid
           VectorClock
+
+-- Initialize δCvRDT
+initDeltaCvRDTState :: DeltaCvRDT s => AggregateState s
+initDeltaCvRDTState =
+    AggregateState
+    { getS      = bottom
+    , getClock  = bottom
+    , getDeltas = Seq.empty
+    , getAckMap = Map.empty
+    }
+
+onOperation ::
+       DeltaCvRDT s
+    => Pid
+    -> Ops s
+    -> KeyType s
+    -> ValueType s
+    -> AggregateState s
+    -> AggregateState s
+onOperation ownId op key value aggregateState =
+    aggregateState {getS = x', getClock = clock', getDeltas = deltas'}
+  where
+    x       = getS aggregateState
+    clock   = getClock aggregateState
+    deltas  = getDeltas aggregateState
+    d       = deltaMutation ownId op key value x
+    x'      = x \/ d
+    clock'  = increment clock ownId
+    deltas' = deltas Seq.|> (clock', d)
+
+onReceive ::
+       DeltaCvRDT s
+    => Pid
+    -> Message s
+    -> AggregateState s
+    -> AggregateState s
+onReceive _ (Ack senderId receivedRemoteClock) aggregateState =
+    aggregateState {getAckMap = aMap'}
+  where
+    aMap  = getAckMap aggregateState
+    aMap' = updateAckMap senderId receivedRemoteClock aMap
+
+onReceive ownId (Delta senderId deltas) aggregateState =
+    case tailEndOfDeltas of
+        Seq.EmptyR                -> aggregateState -- no deltas received
+        _ Seq.:> (remoteClock, _) ->
+            if remoteClock <= ownClock
+                then aggregateState -- deltas contain nothing new
+                else AggregateState
+                         { getS      = undefined
+                         , getClock  = undefined
+                         , getDeltas = undefined
+                         , getAckMap =
+                               updateAckMap senderId remoteClock aMap
+                         }
+  where
+    x               = getS aggregateState
+    ownClock        = getClock aggregateState
+    deltas          = getDeltas aggregateState
+    ownClock'       = increment ownClock ownId
+    aMap            = getAckMap aggregateState
+    tailEndOfDeltas = Seq.viewr deltas
+
+periodicSendTo :: DeltaCvRDT s => AggregateState s -> Pid -> DeltaInterval s
+periodicSendTo = undefined
+
+periodicGarbageCollect :: DeltaCvRDT s => AggregateState s -> AggregateState s
+periodicGarbageCollect = undefined
 
 deltasFollowing :: VectorClock -> DeltaInterval s -> DeltaInterval s
 deltasFollowing c deltas = undefined
