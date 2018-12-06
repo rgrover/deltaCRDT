@@ -6,7 +6,7 @@
 module CRDT.DeltaCvRDT
     ( DeltaCvRDT
     , initDeltaCvRDTState
-    , DeltaCvRDTState
+    , AggregateState
     ) where
 
 import           CRDT.CvRDT
@@ -74,21 +74,22 @@ data DeltaInterval s where
 type AcknowledgementMap = Map.Map Pid VectorClock
 
 -- Application facing state
-data DeltaCvRDTState s where
-    DeltaCvRDTState
+data AggregateState s where
+    AggregateState
         :: DeltaCvRDT s p o k v
         => ( s                  -- main CRDT state
            , VectorClock        -- local vector-clock
            , DeltaInterval s    -- delta-group pending dissemination
            , AcknowledgementMap -- knowledge of neighbour state
            )
-        -> DeltaCvRDTState s
+        -> AggregateState s
 
-initDeltaCvRDTState :: DeltaCvRDT s p o k v => DeltaCvRDTState s
-initDeltaCvRDTState =
-    DeltaCvRDTState (bottom, bottom, DeltaInterval Seq.empty, Map.empty)
-
-data Message
+data MessageType
     = Delta
     | Ack
+
+initDeltaCvRDTState :: DeltaCvRDT s p o k v => AggregateState s
+initDeltaCvRDTState =
+    AggregateState (bottom, bottom, DeltaInterval Seq.empty, Map.empty)
+
 
