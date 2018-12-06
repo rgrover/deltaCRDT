@@ -54,6 +54,47 @@ class CvRDT s => DeltaCvRDT s where
     -- Note: Pid parameter is used for passing own process Id
     deltaMutation :: Pid -> Ops s -> KeyType s -> ValueType s -> s -> s
 
+    initDeltaCvRDTState :: DeltaCvRDT s => AggregateState s
+    initDeltaCvRDTState =
+        AggregateState
+        { getS      = bottom
+        , getClock  = bottom
+        , getDeltas = Seq.empty
+        , getAckMap = Map.empty
+        }
+
+    onOperation ::
+           Pid
+        -> Ops s
+        -> KeyType s
+        -> ValueType s
+        -> AggregateState s
+        -> AggregateState s
+    onOperation ownId op key value aggregateState =
+        aggregateState {getS = x', getClock = clock', getDeltas = deltas'}
+      where
+        x = getS aggregateState
+        clock = getClock aggregateState
+        deltas = getDeltas aggregateState
+        d = deltaMutation ownId op key value x
+        x' = x \/ d
+        clock' = increment clock ownId
+        deltas' = deltas Seq.|> (clock', d)
+
+    onReceive :: Message s -> AggregateState s -> AggregateState s
+    onReceive (Ack remoteId receivedRemoteClock) aggregateState =
+        aggregateState {getAckMap = aMap'}
+      where
+        aMap = getAckMap aggregateState
+        aMap' = Map.insertWith VC.max remoteId receivedRemoteClock aMap
+    onReceive (Delta remoteId (deltas)) aggregateState = undefined
+
+    periodicSendTo :: AggregateState s -> Pid -> DeltaInterval s
+    periodicSendTo = undefined
+
+    periodicGarbageCollect :: AggregateState s -> AggregateState s
+    periodicGarbageCollect = undefined
+
 -- A sequence of deltas tagged with vector-clocks. This is used to exchange
 -- deltas between processes, and also to maintain a local copy of deltas
 -- waiting to be disseminated.
@@ -81,60 +122,5 @@ data Message s
     = Delta Pid (DeltaInterval s)
     | Ack Pid VectorClock
 
-initDeltaCvRDTState :: DeltaCvRDT s => AggregateState s
-initDeltaCvRDTState = AggregateState
-    { getS      = bottom
-    , getClock  = bottom
-    , getDeltas = Seq.empty
-    , getAckMap = Map.empty
-    }
-
 deltasFollowing :: VectorClock -> DeltaInterval s -> DeltaInterval s
 deltasFollowing c deltas = undefined
-
-onReceive ::
-       DeltaCvRDT s
-    => Message s
-    -> AggregateState s
-    -> AggregateState s
-onReceive (Ack remoteId receivedRemoteClock) aggregateState =
-    aggregateState { getAckMap = aMap' }
-  where
-    aMap = getAckMap aggregateState
-    aMap' = Map.insertWith VC.max remoteId receivedRemoteClock aMap
-
-onReceive (Delta remoteId (deltas)) aggregateState =
-    undefined
-
-onOperation ::
-       DeltaCvRDT s
-    => Pid
-    -> Ops s
-    -> KeyType s
-    -> ValueType s
-    -> AggregateState s
-    -> AggregateState s
-onOperation ownId op key value aggregateState =
-    aggregateState { getS      = x'
-                   , getClock  = clock'
-                   , getDeltas = deltas'
-                   }
-  where
-    x       = getS aggregateState
-    clock   = getClock aggregateState
-    deltas  = getDeltas aggregateState
-    d       = deltaMutation ownId op key value x
-    x'      = x \/ d
-    clock'  = increment clock ownId
-    deltas' = deltas Seq.|> (clock', d)
-
-periodicSendTo ::
-       DeltaCvRDT s
-    => AggregateState s
-    -> Pid
-    -> DeltaInterval s
-periodicSendTo = undefined
-
-periodicGarbageCollect ::
-       DeltaCvRDT s => AggregateState s -> AggregateState s
-periodicGarbageCollect = undefined
