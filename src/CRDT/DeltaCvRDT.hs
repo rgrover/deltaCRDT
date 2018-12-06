@@ -127,25 +127,25 @@ onReceive _ (Ack senderId receivedRemoteClock) aggregateState =
     aMap' = updateAckMap senderId receivedRemoteClock aMap
 
 onReceive ownId (Delta senderId deltas) aggregateState =
-    case tailEndOfDeltas of
-        Seq.EmptyR                -> aggregateState -- no deltas received
-        _ Seq.:> (remoteClock, _) ->
-            if remoteClock <= ownClock
-                then aggregateState -- deltas contain nothing new
-                else AggregateState
-                         { getS      = undefined
-                         , getClock  = undefined
-                         , getDeltas = undefined
-                         , getAckMap =
-                               updateAckMap senderId remoteClock aMap
-                         }
+    if sendersLatestClock <= ownClock
+        then aggregateState -- deltas contain nothing new
+        else AggregateState
+                 { getS      = undefined
+                 , getClock  = undefined
+                 , getDeltas = undefined
+                 , getAckMap = updateAckMap senderId sendersLatestClock aMap
+                 }
   where
-    x               = getS aggregateState
-    ownClock        = getClock aggregateState
-    deltas          = getDeltas aggregateState
-    ownClock'       = increment ownClock ownId
-    aMap            = getAckMap aggregateState
-    tailEndOfDeltas = Seq.viewr deltas
+    x                  = getS aggregateState
+    ownClock           = getClock aggregateState
+    deltas             = getDeltas aggregateState
+    ownClock'          = increment ownClock ownId
+    aMap               = getAckMap aggregateState
+    tailEndOfDeltas    = Seq.viewr deltas
+    sendersLatestClock =
+        case tailEndOfDeltas of
+            Seq.EmptyR                -> bottom -- no deltas received
+            _ Seq.:> (remoteClock, _) -> remoteClock
 
 periodicSendTo :: DeltaCvRDT s => AggregateState s -> Pid -> DeltaInterval s
 periodicSendTo = undefined
