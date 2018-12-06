@@ -55,7 +55,9 @@ class CvRDT s o k v =>
     -- without requiring exactly-once delivery, and without being a
     -- representation of the “increment” operation (as in operation-based
     -- CRDTs), which is itself non-idempotent;
-    deltaMutation :: p -> o -> k -> v -> s -> s
+    --
+    -- Note: Pid parameter is used for passing own process Id
+    deltaMutation :: Pid -> o -> k -> v -> s -> s
 
 -- A sequence of deltas tagged with vector-clocks. This is used to exchange deltas
 -- between processes, and also to maintain a local copy of deltas waiting to be

@@ -3,6 +3,8 @@
 
 module CRDT.CvRDT where
 
+import           Misc.Pid
+
 import           Algebra.Lattice (BoundedJoinSemiLattice, (\/))
 
 -- Convergent replicated data types (eventually consistent based on state).
