@@ -1,9 +1,8 @@
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE GADTs                  #-}
-{-# LANGUAGE MultiParamTypeClasses  #-}
-{-# LANGUAGE Rank2Types             #-}
-{-# LANGUAGE TypeFamilies           #-}
-{-# LANGUAGE UndecidableInstances   #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE Rank2Types            #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE UndecidableInstances  #-}
 module CRDT.DeltaCvRDT
     ( DeltaCvRDT
     , initDeltaCvRDTState
@@ -89,8 +88,8 @@ class CvRDT s => DeltaCvRDT s where
         aMap  = getAckMap aggregateState
         aMap' = updateAckMap senderId receivedRemoteClock aMap
     onReceive ownId (Delta senderId deltas) aggregateState =
-        case Seq.viewr deltas of
-            Seq.EmptyR -> aggregateState -- no deltas received
+        case tailEndOfDeltas of
+            Seq.EmptyR                -> aggregateState -- no deltas received
             _ Seq.:> (latestClock, _) ->
                 if latestClock <= ownClock
                     then aggregateState -- deltas contain nothing new
@@ -101,11 +100,12 @@ class CvRDT s => DeltaCvRDT s where
                          , getAckMap = updateAckMap senderId latestClock aMap
                          }
       where
-          x         = getS aggregateState
-          ownClock  = getClock aggregateState
-          deltas    = getDeltas aggregateState
-          ownClock' = increment ownClock ownId
-          aMap      = getAckMap aggregateState
+          x               = getS aggregateState
+          ownClock        = getClock aggregateState
+          deltas          = getDeltas aggregateState
+          ownClock'       = increment ownClock ownId
+          aMap            = getAckMap aggregateState
+          tailEndOfDeltas = Seq.viewr deltas
 
     periodicSendTo :: AggregateState s -> Pid -> DeltaInterval s
     periodicSendTo = undefined
@@ -150,4 +150,4 @@ deltasFollowing c deltas = undefined
 -- helper function to update the AcknowledgementMap
 updateAckMap ::
        Pid -> VectorClock -> AcknowledgementMap -> AcknowledgementMap
-updateAckMap id clock aMap = Map.insertWith VC.max id clock aMap
+updateAckMap = Map.insertWith VC.max
