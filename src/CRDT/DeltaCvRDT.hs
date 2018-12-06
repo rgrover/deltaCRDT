@@ -14,7 +14,8 @@ import           Misc.Pid
 import           Misc.VectorClock
 
 import           Algebra.Lattice                  (BoundedJoinSemiLattice,
-                                                   bottom)
+                                                   bottom, (\/))
+
 import qualified Data.Map.Strict                  as Map
 import qualified Data.Sequence                    as Seq
 
@@ -91,4 +92,36 @@ initDeltaCvRDTState :: DeltaCvRDT s o k v => AggregateState s
 initDeltaCvRDTState =
     AggregateState (bottom, bottom, DeltaInterval Seq.empty, Map.empty)
 
+deltasFollowing :: s -> VectorClock -> DeltaInterval s
+deltasFollowing = undefined
+
+onReceive ::
+       DeltaCvRDT s o k v
+    => MessageType
+    -> Pid                -- sender
+    -> DeltaInterval s    -- deltas
+    -> AggregateState s
+    -> AggregateState s
+onReceive = undefined
+
+onOperation ::
+       DeltaCvRDT s o k v
+    => Pid
+    -> o
+    -> k
+    -> v
+    -> AggregateState s
+    -> AggregateState s
+onOperation ownId op key value (AggregateState (x, clock, deltas, _)) = undefined
+    where delta  = deltaMutation ownId op key value x
+          x'     = x \/ delta
+          clock' = increment clock ownId
+
+periodicSendTo ::
+       DeltaCvRDT s o k v => AggregateState s -> Pid -> DeltaInterval s
+periodicSendTo = undefined
+
+periodicGarbageCollect ::
+       DeltaCvRDT s o k v => AggregateState s -> AggregateState s
+periodicGarbageCollect = undefined
 
