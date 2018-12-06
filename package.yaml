@@ -25,6 +25,7 @@ dependencies:
 - vector-clock
 - lattices
 - containers
+- transformers
 
 library:
   source-dirs: src

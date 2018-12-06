@@ -1,26 +1,37 @@
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GADTs                  #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE Rank2Types             #-}
 
 module CRDT.DeltaCvRDT where
 
 import           CRDT.CvRDT
+import           Misc.Pid
+import           Misc.VectorClock
+
+import           Algebra.Lattice                  (BoundedJoinSemiLattice)
+import           Data.Map.Strict                  as Map
 import           Data.Sequence
 
-import           Algebra.Lattice (BoundedJoinSemiLattice)
+import           Control.Monad.Trans.State.Strict as S
 
--- Convergent replicated data types capable of disseminating delta states
--- (instead of complete clones) in order to achieve eventual consistency.
+-- A delta-interval-based, convergent replicated data types capable of
+-- disseminating delta states (instead of complete clones) in order to achieve
+-- eventual consistency.
 --
 --  s :: state forming a semilattice, possibly using a clock capturing causal dependency
 --  p :: identifier for the local process
 --  o :: identifier for operations permitted on state
 --  k :: key--i.e. an identifier for some element within state
 --  v :: result of querying state with a key
-class CvRDT s p o k v => DeltaCvRDT s p o k v
+--
+-- In a δ-CRDT, the effect of applying a mutation, represented by a
+-- delta-mutation δ = mδ(X), is decoupled from the resulting state X′ = X ⊔ δ,
+-- which allows shipping this δ rather than the entire resulting state X′
+class CvRDT s p o k v =>
+      DeltaCvRDT s p o k v
     | s -> p o k v
     where
-
     -- A delta-mutator mδ is a function, corresponding  to  an  update
     -- operation,  which  takes  a  state X in  a  join-semilattice S as
     -- parameter and returns a delta-mutation mδ(X), also in S.
@@ -40,7 +51,25 @@ class CvRDT s p o k v => DeltaCvRDT s p o k v
     -- CRDTs), which is itself non-idempotent;
     deltaMutation :: p -> o -> k -> v -> s -> s
 
--- In a δ-CRDT, the effect of applying a mutation, represented by a
--- delta-mutation δ = mδ(X), is decoupled from the resulting state X′ = X ⊔ δ,
--- which allows shipping this δ rather than the entire resulting state X′
-type DeltaGroup a = BoundedJoinSemiLattice a => Seq a
+-- A sequence of deltas tagged with vector-clocks. This is used to exchange deltas
+-- between processes, and also to maintain a local copy of deltas waiting to be
+-- disseminated.
+-- Note: Delta-Intervals may be held in volatile storage.
+data DeltaInterval s where
+    DeltaInterval
+        :: BoundedJoinSemiLattice s => Seq (VectorClock, s) -> DeltaInterval s
+
+-- Each process i keeps an acknowledgment map Ai that stores, for each
+-- neighbor j, the largest clock b for all delta-intervals acknowledged
+-- by j. Ai[i] should match a process's own vector clock.
+-- Note: this map may be held in volatile storage.
+type AcknowledgementMap = Map Pid VectorClock
+
+-- Application facing state
+type DeltaCvRDTState s
+     = S.State ( s                  -- main CRDT state
+               , VectorClock        -- local vector-clock
+               , DeltaInterval s    -- delta-group pending dissemination
+               , AcknowledgementMap -- knowledge of neighbour state
+               ) -- Note: for fault tolerance, the first two members of
+                 -- this pair need to be persistent.
