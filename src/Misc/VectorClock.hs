@@ -1,13 +1,15 @@
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE InstanceSigs               #-}
-module Misc.VectorClock (VectorClock, increment) where
+module Misc.VectorClock (VectorClock, increment, max) where
+
+import           Prelude          hiding (max)
 
 import qualified Data.VectorClock as VC
 import           Misc.Pid         (Pid (..))
 
-import           Algebra.Lattice  (BoundedJoinSemiLattice, JoinSemiLattice,
-                                   bottom, (\/))
+import           Algebra.Lattice  (BoundedJoinSemiLattice,
+                                   JoinSemiLattice, bottom, (\/))
 
 import           Data.Word        (Word64)
 
@@ -29,3 +31,6 @@ instance BoundedJoinSemiLattice VectorClock where
 
 increment :: VectorClock -> Pid -> VectorClock
 increment c ownId = VC.incWithDefault ownId c 0
+
+max :: VectorClock -> VectorClock -> VectorClock
+max = VC.max
