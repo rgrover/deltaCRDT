@@ -90,14 +90,14 @@ class CvRDT s => DeltaCvRDT s where
     onReceive ownId (Delta senderId deltas) aggregateState =
         case tailEndOfDeltas of
             Seq.EmptyR                -> aggregateState -- no deltas received
-            _ Seq.:> (latestClock, _) ->
-                if latestClock <= ownClock
+            _ Seq.:> (remoteClock, _) ->
+                if remoteClock <= ownClock
                     then aggregateState -- deltas contain nothing new
                     else AggregateState
-                         { getS = undefined
-                         , getClock = ownClock'
+                         { getS      = undefined
+                         , getClock  = ownClock'
                          , getDeltas = undefined
-                         , getAckMap = updateAckMap senderId latestClock aMap
+                         , getAckMap = updateAckMap senderId remoteClock aMap
                          }
       where
           x               = getS aggregateState
