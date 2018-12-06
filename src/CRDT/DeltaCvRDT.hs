@@ -3,15 +3,20 @@
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE Rank2Types             #-}
 
-module CRDT.DeltaCvRDT where
+module CRDT.DeltaCvRDT
+    ( DeltaCvRDT
+    , initDeltaCvRDTState
+    , DeltaCvRDTState
+    ) where
 
 import           CRDT.CvRDT
 import           Misc.Pid
 import           Misc.VectorClock
 
-import           Algebra.Lattice                  (BoundedJoinSemiLattice)
-import           Data.Map.Strict                  as Map
-import           Data.Sequence
+import           Algebra.Lattice                  (BoundedJoinSemiLattice,
+                                                   bottom)
+import qualified Data.Map.Strict                  as Map
+import qualified Data.Sequence                    as Seq
 
 import           Control.Monad.Trans.State.Strict as S
 
@@ -19,7 +24,8 @@ import           Control.Monad.Trans.State.Strict as S
 -- disseminating delta states (instead of complete clones) in order to achieve
 -- eventual consistency.
 --
---  s :: state forming a semilattice, possibly using a clock capturing causal dependency
+--  s :: CRDT state forming a semilattice, where modifications are
+--          inflationary and join is conflict-free.
 --  p :: identifier for the local process
 --  o :: identifier for operations permitted on state
 --  k :: key--i.e. an identifier for some element within state
@@ -57,19 +63,32 @@ class CvRDT s p o k v =>
 -- Note: Delta-Intervals may be held in volatile storage.
 data DeltaInterval s where
     DeltaInterval
-        :: BoundedJoinSemiLattice s => Seq (VectorClock, s) -> DeltaInterval s
+        :: BoundedJoinSemiLattice s
+        => Seq.Seq (VectorClock, s)
+        -> DeltaInterval s
 
 -- Each process i keeps an acknowledgment map Ai that stores, for each
 -- neighbor j, the largest clock b for all delta-intervals acknowledged
 -- by j. Ai[i] should match a process's own vector clock.
 -- Note: this map may be held in volatile storage.
-type AcknowledgementMap = Map Pid VectorClock
+type AcknowledgementMap = Map.Map Pid VectorClock
 
 -- Application facing state
-type DeltaCvRDTState s
-     = S.State ( s                  -- main CRDT state
-               , VectorClock        -- local vector-clock
-               , DeltaInterval s    -- delta-group pending dissemination
-               , AcknowledgementMap -- knowledge of neighbour state
-               ) -- Note: for fault tolerance, the first two members of
-                 -- this pair need to be persistent.
+data DeltaCvRDTState s where
+    DeltaCvRDTState
+        :: DeltaCvRDT s p o k v
+        => ( s                  -- main CRDT state
+           , VectorClock        -- local vector-clock
+           , DeltaInterval s    -- delta-group pending dissemination
+           , AcknowledgementMap -- knowledge of neighbour state
+           )
+        -> DeltaCvRDTState s
+
+initDeltaCvRDTState :: DeltaCvRDT s p o k v => DeltaCvRDTState s
+initDeltaCvRDTState =
+    DeltaCvRDTState (bottom, bottom, DeltaInterval Seq.empty, Map.empty)
+
+data Message
+    = Delta
+    | Ack
+
