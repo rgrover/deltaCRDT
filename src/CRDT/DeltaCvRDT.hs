@@ -164,19 +164,21 @@ onReceive ownId (Deltas senderId deltas) aggregateState =
         -> (VectorClock, s)
     mergeDeltaWithState c1s1 _ c2s2 = c1s1 \/ c2s2
 
-periodicSendTo :: DeltaCvRDT s => AggregateState s -> Pid -> Maybe (Message s)
+periodicSendTo ::
+       DeltaCvRDT s => AggregateState s -> Pid -> Maybe (Message s)
 periodicSendTo aggregateState receiver =
     if ownClock <= knownRemoteClock
         then Nothing
         else Just (Deltas receiver relevantDeltas)
-    where
-        ownClock         = getClock aggregateState
-        ackMap           = getAckMap aggregateState
-        knownRemoteClock = findWithDefault bottom receiver ackMap
-        deltas           = getDeltas aggregateState
-        relevantDeltas   = deltas `unknownTo` knownRemoteClock
+  where
+    ownClock         = getClock aggregateState
+    ackMap           = getAckMap aggregateState
+    knownRemoteClock = findWithDefault bottom receiver ackMap
+    deltas           = getDeltas aggregateState
+    relevantDeltas   = deltas `unknownTo` knownRemoteClock
 
-periodicGarbageCollect :: DeltaCvRDT s => AggregateState s -> AggregateState s
+periodicGarbageCollect ::
+       DeltaCvRDT s => AggregateState s -> AggregateState s
 periodicGarbageCollect = undefined
 
 -- helper function to update the AcknowledgementMap
