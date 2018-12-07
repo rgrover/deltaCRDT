@@ -11,15 +11,16 @@ module CRDT.DeltaCvRDT
 
 import           CRDT.CvRDT
 import           Misc.Pid
-import           Misc.VectorClock                 as VC
+import           Misc.VectorClock as VectorClock (VectorClock (..), increment,
+                                                  max)
 
-import           Algebra.Lattice                  (BoundedJoinSemiLattice,
-                                                   bottom, (\/))
+import           Algebra.Lattice  (BoundedJoinSemiLattice, bottom, (\/))
 
-import qualified Data.Map.Strict                  as Map
-import qualified Data.Sequence                    as Seq
-
-import           Control.Monad.Trans.State.Strict as S
+import           Data.Map.Strict  as Map (Map, empty, findWithDefault,
+                                          insertWith)
+import           Data.Sequence    as Seq (Seq (..), ViewR ((:>), EmptyR),
+                                          dropWhileL, empty, foldlWithIndex,
+                                          viewr, (><), (|>))
 
 -- A delta-interval-based, convergent replicated data types capable of
 -- disseminating delta states (instead of complete clones) in order to
@@ -59,13 +60,13 @@ class CvRDT s => DeltaCvRDT s where
 -- maintain a local copy of deltas waiting to be disseminated.
 --
 -- Note: Delta-Intervals may be held in volatile storage.
-type DeltaInterval s = Seq.Seq (VectorClock, s)
+type DeltaInterval s = Seq (VectorClock, s)
 
 -- Each process i keeps an acknowledgment map Ai that stores, for each
 -- neighbor j, the largest clock b for all delta-intervals
 -- acknowledged by j. Ai[i] should match a process's own vector clock.
 -- Note: this map may be held in volatile storage.
-type AckMap = Map.Map Pid VectorClock
+type AckMap = Map Pid VectorClock
 
 data AggregateState s where
     AggregateState ::
@@ -164,7 +165,7 @@ periodicSendTo :: DeltaCvRDT s => AggregateState s -> Pid -> Message s
 periodicSendTo aggregateState receiver = Deltas receiver relevantDeltas
     where
         ackMap           = getAckMap aggregateState
-        knownRemoteClock = Map.findWithDefault bottom receiver ackMap
+        knownRemoteClock = findWithDefault bottom receiver ackMap
         deltas           = getDeltas aggregateState
         relevantDeltas   = deltas `unknownTo` knownRemoteClock
 
@@ -173,7 +174,7 @@ periodicGarbageCollect = undefined
 
 -- helper function to update the AcknowledgementMap
 updateAckMap :: Pid -> VectorClock -> AckMap -> AckMap
-updateAckMap = Map.insertWith VC.max
+updateAckMap = insertWith VectorClock.max
 
 -- helper function to select potentially interesting deltas from an
 -- deltaInterval
