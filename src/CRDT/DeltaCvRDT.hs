@@ -11,16 +11,19 @@ module CRDT.DeltaCvRDT
 
 import           CRDT.CvRDT
 import           Misc.Pid
-import           Misc.VectorClock as VectorClock (VectorClock (..), increment,
-                                                  max)
+import           Misc.VectorClock as VectorClock (VectorClock (..),
+                                                  increment, max, min)
 
-import           Algebra.Lattice  (BoundedJoinSemiLattice, bottom, (\/))
+import           Algebra.Lattice  (BoundedJoinSemiLattice, bottom,
+                                   (\/))
 
 import           Data.Map.Strict  as Map (Map, empty, findWithDefault,
-                                          insertWith)
-import           Data.Sequence    as Seq (Seq (..), ViewR ((:>), EmptyR),
-                                          dropWhileL, empty, foldlWithIndex,
-                                          viewr, (><), (|>))
+                                          insertWith, toList)
+import           Data.Sequence    as Seq (Seq (..),
+                                          ViewR ((:>), EmptyR),
+                                          dropWhileL, empty,
+                                          foldlWithIndex, viewr, (><),
+                                          (|>))
 
 -- A delta-interval-based, convergent replicated data types capable of
 -- disseminating delta states (instead of complete clones) in order to
@@ -113,7 +116,7 @@ onOperation ownId op key value aggregateState =
     d       = deltaMutation ownId op key value x
     x'      = x \/ d
     clock'  = increment clock ownId
-    deltas' = deltas Seq.|> (clock', d)
+    deltas' = deltas |> (clock', d)
 
 onReceive ::
        DeltaCvRDT s
@@ -142,17 +145,17 @@ onReceive ownId (Deltas senderId deltas) aggregateState =
     ownDeltas          = getDeltas aggregateState
     ownClock'          = increment ownClock ownId
     aMap               = getAckMap aggregateState
-    tailEndOfDeltas    = Seq.viewr deltas
+    tailEndOfDeltas    = viewr deltas
     sendersLatestClock =
         case tailEndOfDeltas of
-            Seq.EmptyR                -> bottom -- no deltas received
-            _ Seq.:> (remoteClock, _) -> remoteClock
+            EmptyR                -> bottom -- no deltas received
+            _ :> (remoteClock, _) -> remoteClock
 
     usefulDeltas   = deltas `unknownTo` ownClock
-    ownDeltas'     = ownDeltas Seq.>< usefulDeltas
+    ownDeltas'     = ownDeltas >< usefulDeltas
 
     (finalClock, finalState) =
-        Seq.foldlWithIndex mergeDeltaWithState (ownClock', x) usefulDeltas
+        foldlWithIndex mergeDeltaWithState (ownClock', x) usefulDeltas
     mergeDeltaWithState ::
            DeltaCvRDT s
         => (VectorClock, s)
@@ -161,20 +164,61 @@ onReceive ownId (Deltas senderId deltas) aggregateState =
         -> (VectorClock, s)
     mergeDeltaWithState c1s1 _ c2s2 = c1s1 \/ c2s2
 
-periodicSendTo :: DeltaCvRDT s => AggregateState s -> Pid -> Maybe (Message s)
+-- This method prepares a message to be sent to a neighbour. The user
+-- of this library is expected to call this method periodically in a
+-- manner which ensures eventual consistency--for instance, by sending
+-- a message to all, a subset, or a randomly selected neighbour.
+--
+--   ci :: VectorClock // this is the local clock
+--   Di :: DeltaInterval // i.e. [(clock, delta)]
+--   Xi :: CvRDT-state
+--   Ai :: AckMap
+--   j :: Pid
+--   j = RandomNeighbour // say
+--
+-- pseudocode:
+--
+--   if ci <= Ai(j)
+--       then return (Deltas {})
+--       else
+--           if Di = {} ∨ min(domain(Di)) > Ai(j) then
+--               d = Xi -- TODO:
+--           else
+--               d = ⊔ { Di(l) | Ai(j) ≤ l }
+--
+--           return (Deltas, d, ci)
+periodicSendTo ::
+       DeltaCvRDT s => AggregateState s -> Pid -> Maybe (Message s)
 periodicSendTo aggregateState receiver =
     if ownClock <= knownRemoteClock
         then Nothing
         else Just (Deltas receiver relevantDeltas)
-    where
-        ownClock         = getClock aggregateState
-        ackMap           = getAckMap aggregateState
-        knownRemoteClock = findWithDefault bottom receiver ackMap
-        deltas           = getDeltas aggregateState
-        relevantDeltas   = deltas `unknownTo` knownRemoteClock
+  where
+    ownClock         = getClock aggregateState
+    ackMap           = getAckMap aggregateState
+    knownRemoteClock = findWithDefault bottom receiver ackMap
+    deltas           = getDeltas aggregateState
+    relevantDeltas   = deltas `unknownTo` knownRemoteClock
 
-periodicGarbageCollect :: DeltaCvRDT s => AggregateState s -> AggregateState s
-periodicGarbageCollect = undefined
+-- The user of this library needs to call this method periodically to
+-- garbage collect local deltas by throwing away entries which have
+-- been disseminated to all neighbours:
+--
+--   Di :: DeltaInterval
+--   Ai :: AckMap
+--
+-- pseudocode:
+--   minClock  = min { Cj | Cj ∈ Ai } :: VectorClock
+--   Di′ = { ( clock, delta) ∈ Di | clock ≥ minClock }
+periodicGarbageCollect ::
+       DeltaCvRDT s => AggregateState s -> AggregateState s
+periodicGarbageCollect aggregate = aggregate { getDeltas = deltas' }
+  where
+    aMap          = getAckMap aggregate
+    (_, anyClock) = head $ Map.toList aMap
+    minClock      = foldl VectorClock.min anyClock aMap
+    deltas        = getDeltas aggregate
+    deltas'       = deltas `unknownTo` minClock
 
 -- helper function to update the AcknowledgementMap
 updateAckMap :: Pid -> VectorClock -> AckMap -> AckMap
@@ -183,4 +227,4 @@ updateAckMap = insertWith VectorClock.max
 -- helper function to select potentially interesting deltas from an
 -- deltaInterval
 unknownTo :: DeltaInterval s -> VectorClock -> DeltaInterval s
-unknownTo ds c = Seq.dropWhileL ((<= c) . fst) ds
+unknownTo ds c = dropWhileL ((<= c) . fst) ds
