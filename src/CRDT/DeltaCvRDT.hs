@@ -12,13 +12,13 @@ module CRDT.DeltaCvRDT
 import           CRDT.CvRDT
 import           Misc.Pid
 import           Misc.VectorClock as VectorClock (VectorClock (..),
-                                                  increment, max)
+                                                  increment, max, min)
 
 import           Algebra.Lattice  (BoundedJoinSemiLattice, bottom,
                                    (\/))
 
 import           Data.Map.Strict  as Map (Map, empty, findWithDefault,
-                                          insertWith)
+                                          insertWith, toList)
 import           Data.Sequence    as Seq (Seq (..),
                                           ViewR ((:>), EmptyR),
                                           dropWhileL, empty,
@@ -164,6 +164,29 @@ onReceive ownId (Deltas senderId deltas) aggregateState =
         -> (VectorClock, s)
     mergeDeltaWithState c1s1 _ c2s2 = c1s1 \/ c2s2
 
+-- This method prepares a message to be sent to a neighbour. The user
+-- of this library is expected to call this method periodically in a
+-- manner which ensures eventual consistency--for instance, by sending
+-- a message to all, a subset, or a randomly selected neighbour.
+--
+--   ci :: VectorClock // this is the local clock
+--   Di :: DeltaInterval // i.e. [(clock, delta)]
+--   Xi :: CvRDT-state
+--   Ai :: AckMap
+--   j :: Pid
+--   j = RandomNeighbour // say
+--
+-- pseudocode:
+--
+--   if ci <= Ai(j)
+--       then return (Deltas {})
+--       else
+--           if Di = {} ∨ min(domain(Di)) > Ai(j) then
+--               d = Xi -- TODO:
+--           else
+--               d = ⊔ { Di(l) | Ai(j) ≤ l }
+--
+--           return (Deltas, d, ci)
 periodicSendTo ::
        DeltaCvRDT s => AggregateState s -> Pid -> Maybe (Message s)
 periodicSendTo aggregateState receiver =
@@ -177,9 +200,25 @@ periodicSendTo aggregateState receiver =
     deltas           = getDeltas aggregateState
     relevantDeltas   = deltas `unknownTo` knownRemoteClock
 
+-- The user of this library needs to call this method periodically to
+-- garbage collect local deltas by throwing away entries which have
+-- been disseminated to all neighbours:
+--
+--   Di :: DeltaInterval
+--   Ai :: AckMap
+--
+-- pseudocode:
+--   minClock  = min { Cj | Cj ∈ Ai } :: VectorClock
+--   Di′ = { ( clock, delta) ∈ Di | clock ≥ minClock }
 periodicGarbageCollect ::
        DeltaCvRDT s => AggregateState s -> AggregateState s
-periodicGarbageCollect = undefined
+periodicGarbageCollect aggregate = aggregate { getDeltas = deltas' }
+  where
+    aMap          = getAckMap aggregate
+    (_, anyClock) = head $ Map.toList aMap
+    minClock      = foldl VectorClock.min anyClock aMap
+    deltas        = getDeltas aggregate
+    deltas'       = deltas `unknownTo` minClock
 
 -- helper function to update the AcknowledgementMap
 updateAckMap :: Pid -> VectorClock -> AckMap -> AckMap
