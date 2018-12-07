@@ -16,9 +16,9 @@ import           Algebra.Lattice (BoundedJoinSemiLattice, (\/))
 -- The state forms a join semilattice, which means that any finite collection
 -- of states can be joined to form a least-upper-bound.
 class (BoundedJoinSemiLattice s, Eq s) => CvRDT s where
-    type Ops s       -- Enumeration type for permitted operations
-    type KeyType s
-    type ValueType s
+    type Ops s       :: * -- Enumeration type for permitted operations
+    type KeyType s   :: *
+    type ValueType s :: *
 
     -- local fetch based on current state
     query :: s -> KeyType s -> ValueType s
