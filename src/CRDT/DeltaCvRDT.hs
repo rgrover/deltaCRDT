@@ -11,16 +11,19 @@ module CRDT.DeltaCvRDT
 
 import           CRDT.CvRDT
 import           Misc.Pid
-import           Misc.VectorClock as VectorClock (VectorClock (..), increment,
-                                                  max)
+import           Misc.VectorClock as VectorClock (VectorClock (..),
+                                                  increment, max)
 
-import           Algebra.Lattice  (BoundedJoinSemiLattice, bottom, (\/))
+import           Algebra.Lattice  (BoundedJoinSemiLattice, bottom,
+                                   (\/))
 
 import           Data.Map.Strict  as Map (Map, empty, findWithDefault,
                                           insertWith)
-import           Data.Sequence    as Seq (Seq (..), ViewR ((:>), EmptyR),
-                                          dropWhileL, empty, foldlWithIndex,
-                                          viewr, (><), (|>))
+import           Data.Sequence    as Seq (Seq (..),
+                                          ViewR ((:>), EmptyR),
+                                          dropWhileL, empty,
+                                          foldlWithIndex, viewr, (><),
+                                          (|>))
 
 -- A delta-interval-based, convergent replicated data types capable of
 -- disseminating delta states (instead of complete clones) in order to
@@ -113,7 +116,7 @@ onOperation ownId op key value aggregateState =
     d       = deltaMutation ownId op key value x
     x'      = x \/ d
     clock'  = increment clock ownId
-    deltas' = deltas Seq.|> (clock', d)
+    deltas' = deltas |> (clock', d)
 
 onReceive ::
        DeltaCvRDT s
@@ -142,17 +145,17 @@ onReceive ownId (Deltas senderId deltas) aggregateState =
     ownDeltas          = getDeltas aggregateState
     ownClock'          = increment ownClock ownId
     aMap               = getAckMap aggregateState
-    tailEndOfDeltas    = Seq.viewr deltas
+    tailEndOfDeltas    = viewr deltas
     sendersLatestClock =
         case tailEndOfDeltas of
-            Seq.EmptyR                -> bottom -- no deltas received
-            _ Seq.:> (remoteClock, _) -> remoteClock
+            EmptyR                -> bottom -- no deltas received
+            _ :> (remoteClock, _) -> remoteClock
 
     usefulDeltas   = deltas `unknownTo` ownClock
-    ownDeltas'     = ownDeltas Seq.>< usefulDeltas
+    ownDeltas'     = ownDeltas >< usefulDeltas
 
     (finalClock, finalState) =
-        Seq.foldlWithIndex mergeDeltaWithState (ownClock', x) usefulDeltas
+        foldlWithIndex mergeDeltaWithState (ownClock', x) usefulDeltas
     mergeDeltaWithState ::
            DeltaCvRDT s
         => (VectorClock, s)
@@ -183,4 +186,4 @@ updateAckMap = insertWith VectorClock.max
 -- helper function to select potentially interesting deltas from an
 -- deltaInterval
 unknownTo :: DeltaInterval s -> VectorClock -> DeltaInterval s
-unknownTo ds c = Seq.dropWhileL ((<= c) . fst) ds
+unknownTo ds c = dropWhileL ((<= c) . fst) ds
