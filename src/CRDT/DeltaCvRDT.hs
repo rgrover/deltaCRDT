@@ -80,7 +80,7 @@ data AggregateState s where
 -- clocks--i.e. DeltaInterval--or it can be an acknowledgement for
 -- previously sent deltas
 data Message s
-    = Delta Pid
+    = Deltas Pid
             (DeltaInterval s)
     | Ack Pid
           VectorClock
@@ -126,7 +126,7 @@ onReceive _ (Ack senderId receivedRemoteClock) aggregateState =
     aMap  = getAckMap aggregateState
     aMap' = updateAckMap senderId receivedRemoteClock aMap
 
-onReceive ownId (Delta senderId deltas) aggregateState =
+onReceive ownId (Deltas senderId deltas) aggregateState =
     if sendersLatestClock <= ownClock
         then aggregateState -- deltas contain nothing new
         else AggregateState
@@ -147,8 +147,6 @@ onReceive ownId (Delta senderId deltas) aggregateState =
             Seq.EmptyR                -> bottom -- no deltas received
             _ Seq.:> (remoteClock, _) -> remoteClock
 
-    unknownTo :: DeltaInterval s -> VectorClock -> DeltaInterval s
-    unknownTo ds c = Seq.dropWhileL ((<= c) . fst) ds
     usefulDeltas   = deltas `unknownTo` ownClock
     ownDeltas'     = ownDeltas Seq.>< usefulDeltas
 
@@ -162,8 +160,13 @@ onReceive ownId (Delta senderId deltas) aggregateState =
         -> (VectorClock, s)
     mergeDeltaWithState c1s1 _ c2s2 = c1s1 \/ c2s2
 
-periodicSendTo :: DeltaCvRDT s => AggregateState s -> Pid -> DeltaInterval s
-periodicSendTo = undefined
+periodicSendTo :: DeltaCvRDT s => AggregateState s -> Pid -> Message s
+periodicSendTo aggregateState receiver = Deltas receiver relevantDeltas
+    where
+        ackMap           = getAckMap aggregateState
+        knownRemoteClock = Map.findWithDefault bottom receiver ackMap
+        deltas           = getDeltas aggregateState
+        relevantDeltas   = deltas `unknownTo` knownRemoteClock
 
 periodicGarbageCollect :: DeltaCvRDT s => AggregateState s -> AggregateState s
 periodicGarbageCollect = undefined
@@ -171,3 +174,8 @@ periodicGarbageCollect = undefined
 -- helper function to update the AcknowledgementMap
 updateAckMap :: Pid -> VectorClock -> AckMap -> AckMap
 updateAckMap = Map.insertWith VC.max
+
+-- helper function to select potentially interesting deltas from an
+-- deltaInterval
+unknownTo :: DeltaInterval s -> VectorClock -> DeltaInterval s
+unknownTo ds c = Seq.dropWhileL ((<= c) . fst) ds
