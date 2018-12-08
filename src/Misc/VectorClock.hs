@@ -1,13 +1,17 @@
+{-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE InstanceSigs               #-}
+{-# LANGUAGE UndecidableInstances       #-}
 module Misc.VectorClock
     ( VectorClock
-    , increment
     , max
+    , increment
     , Misc.VectorClock.min -- qualified to avoid conflicting with Prelude
     ) where
 import           Prelude          hiding (max)
+
+import           CRDT.DeltaCvRDT  (DeltaCvRDT (..))
 
 import qualified Data.VectorClock as VC (Relation (..),
                                          VectorClock (..), combine,
@@ -18,40 +22,41 @@ import           Misc.Pid         (Pid (..))
 import           Algebra.Lattice  (BoundedJoinSemiLattice,
                                    JoinSemiLattice, bottom, (\/))
 
-import           Data.Word        (Word64)
+-- type of vector-clock to help establish causal dependency. This is
+-- built atop the CRDT-specific event counter, using Pid as the key.
+newtype VectorClock s = VectorClock (VC.VectorClock Pid (EventCounter s))
 
--- type for process local logical time
-newtype EventCount =
-    E Word64
-    deriving (Eq, Ord, Show, Num)
+instance DeltaCvRDT s => JoinSemiLattice (VectorClock s) where
+    (\/) :: VectorClock s -> VectorClock s -> VectorClock s
+    (VectorClock c1) \/ (VectorClock c2) = VectorClock $ VC.max c1 c2
 
--- type of vector-clock to help establish causal dependency
-type VectorClock = VC.VectorClock Pid EventCount
+instance DeltaCvRDT s => BoundedJoinSemiLattice (VectorClock s) where
+    bottom :: VectorClock s
+    bottom = VectorClock VC.empty
 
-instance JoinSemiLattice VectorClock where
-    (\/) :: VectorClock -> VectorClock -> VectorClock
-    (\/) = VC.max
+instance (DeltaCvRDT s, Eq (EventCounter s)) =>
+         Eq (VectorClock s) where
+    (VectorClock c1) == (VectorClock c2) = c1 == c2
 
-instance BoundedJoinSemiLattice VectorClock where
-    bottom :: VectorClock
-    bottom = VC.empty
-
-instance Ord VectorClock where
-    c1 <= c2 = (c1 == c2) || (c1 `VC.relation` c2 == VC.Causes)
+instance DeltaCvRDT s => Ord (VectorClock s) where
+    (VectorClock c1) <= (VectorClock c2) =
+        (c1 == c2) || (c1 `VC.relation` c2 == VC.Causes)
 
 -- increment a process-specific component of a vector clock.
-increment :: VectorClock -> Pid -> VectorClock
-increment c ownId = VC.incWithDefault ownId c 0
+increment :: DeltaCvRDT s => VectorClock s -> Pid -> VectorClock s
+increment (VectorClock c) ownId =
+    VectorClock $ VC.incWithDefault ownId c 0
 
 -- The maximum of two vector-clocks; adding entries if absent in
 -- either of the two clocks.
-max :: VectorClock -> VectorClock -> VectorClock
-max = VC.max
+max :: DeltaCvRDT s => VectorClock s -> VectorClock s -> VectorClock s
+max (VectorClock c1) (VectorClock c2) = VectorClock $ VC.max c1 c2
 
 -- The minimum of the two vector clocks; discarding any entries which
 -- aren't present in both clocks
-min :: VectorClock -> VectorClock -> VectorClock
-min = VC.combine minEntry
+min :: DeltaCvRDT s => VectorClock s -> VectorClock s -> VectorClock s
+min (VectorClock c1) (VectorClock c2) =
+    VectorClock $ VC.combine minEntry c1 c2
   where
     minEntry _ Nothing Nothing   = Nothing
     minEntry _ _ Nothing         = Nothing

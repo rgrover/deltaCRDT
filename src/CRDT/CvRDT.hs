@@ -1,5 +1,5 @@
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeFamilies     #-}
 
 module CRDT.CvRDT where
 
@@ -17,7 +17,16 @@ import           Algebra.Lattice (BoundedJoinSemiLattice, (\/))
 --
 -- The state forms a join semilattice, which means that any finite
 -- collection of states can be joined to form a least-upper-bound.
-class (BoundedJoinSemiLattice s, Eq s) => CvRDT s where
+class ( BoundedJoinSemiLattice s
+      , Eq s
+      , Show (Ops s)
+      , Eq (Ops s)
+      , Show (KeyType s)
+      , Ord (KeyType s)
+      , Eq (ValueType s)
+      ) =>
+      CvRDT s
+    where
     type Ops s       :: * -- Enumeration type for permitted operations
     type KeyType s   :: *
     type ValueType s :: *
@@ -33,8 +42,6 @@ class (BoundedJoinSemiLattice s, Eq s) => CvRDT s where
     -- If X ∈ s and m is a modify operation, then X ⊑ m(X), where ⊑ is
     -- the `joinLeq`--i.e. the partial ordering induced by the
     -- semilattice.
-    --
-    -- Note: Pid parameter is used for passing own process Id
     modify :: Pid -> Ops s -> KeyType s -> ValueType s -> s -> s
 
     -- The merge function provides a join for any pair of replica
