@@ -17,13 +17,13 @@ import           Algebra.Lattice (BoundedJoinSemiLattice, (\/))
 -- collection of states can be joined to form a least-upper-bound.
 class ( BoundedJoinSemiLattice s
       , Ord (ReplicaId s)
-      , Eq (Ops s)
+      , Eq (OpsType s)
       , Ord (KeyType s)
       ) =>
       CvRDT s
     where
     type ReplicaId s :: *
-    type Ops s       :: * -- Enumeration type for permitted operations
+    type OpsType s   :: * -- Enumeration type for permitted operations
     type KeyType s   :: *
     type ValueType s :: *
 
@@ -38,7 +38,7 @@ class ( BoundedJoinSemiLattice s
     -- If X ∈ s and m is a modify operation, then X ⊑ m(X), where ⊑ is
     -- the `joinLeq`--i.e. the partial ordering induced by the
     -- semilattice.
-    modify :: Ops s -> KeyType s -> ValueType s -> s -> s
+    modify :: OpsType s -> KeyType s -> ValueType s -> s -> s
 
     -- The merge function provides a join for any pair of replica
     -- states. It needs to be commutative, associative, and
