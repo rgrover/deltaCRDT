@@ -28,7 +28,7 @@ class ( BoundedJoinSemiLattice s
     type ValueType s :: *
 
     -- local fetch based on current state
-    query :: s -> KeyType s -> ValueType s
+    query :: s -> KeyType s -> Maybe (ValueType s)
 
     -- The modify function. This must monotonically increase the
     -- internal state, according to the same partial order rules as
