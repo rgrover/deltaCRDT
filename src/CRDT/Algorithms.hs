@@ -4,7 +4,7 @@ module CRDT.Algorithms where
 import           CRDT.CvRDT       (CvRDT (..))
 import           CRDT.DeltaCvRDT  (DeltaCvRDT (..))
 
-import           Misc.VectorClock as VectorClock (VectorClock (..),
+import           CRDT.VectorClock as VectorClock (VectorClock (..),
                                                   increment, max)
 
 import           Algebra.Lattice  (BoundedJoinSemiLattice, bottom,

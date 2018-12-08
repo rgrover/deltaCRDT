@@ -3,11 +3,11 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE InstanceSigs               #-}
 {-# LANGUAGE UndecidableInstances       #-}
-module Misc.VectorClock
+module CRDT.VectorClock
     ( VectorClock
     , max
     , increment
-    , Misc.VectorClock.min -- qualified to avoid conflicting with Prelude
+    , CRDT.VectorClock.min -- qualified to avoid conflicting with Prelude
     ) where
 import           Prelude          hiding (max)
 
