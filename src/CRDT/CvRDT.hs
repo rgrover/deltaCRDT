@@ -16,14 +16,9 @@ import           Algebra.Lattice (BoundedJoinSemiLattice, (\/))
 -- The state forms a join semilattice, which means that any finite
 -- collection of states can be joined to form a least-upper-bound.
 class ( BoundedJoinSemiLattice s
-      , Eq s
       , Ord (ReplicaId s)
-      , Show (ReplicaId s)
       , Eq (Ops s)
-      , Show (Ops s)
       , Ord (KeyType s)
-      , Show (KeyType s)
-      , Eq (ValueType s)
       ) =>
       CvRDT s
     where
