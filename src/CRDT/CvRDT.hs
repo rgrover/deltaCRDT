@@ -42,7 +42,7 @@ class ( BoundedJoinSemiLattice s
     -- If X ∈ s and m is a modify operation, then X ⊑ m(X), where ⊑ is
     -- the `joinLeq`--i.e. the partial ordering induced by the
     -- semilattice.
-    modify :: Pid -> Ops s -> KeyType s -> ValueType s -> s -> s
+    modify :: Ops s -> KeyType s -> ValueType s -> s -> s
 
     -- The merge function provides a join for any pair of replica
     -- states. It needs to be commutative, associative, and

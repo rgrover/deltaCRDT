@@ -50,4 +50,4 @@ class ( CvRDT s
     -- times without requiring exactly-once delivery, and without
     -- being a representation of the “increment” operation (as in
     -- operation-based CRDTs), which is itself non-idempotent;
-    deltaMutation :: Pid -> Ops s -> KeyType s -> ValueType s -> s -> s
+    deltaMutation :: Ops s -> KeyType s -> ValueType s -> s -> s

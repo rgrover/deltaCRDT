@@ -34,7 +34,8 @@ type AckMap s = Map Pid (VectorClock s)
 data AggregateState s where
     AggregateState ::
          --DeltaCvRDT s => --TODO: hindent fails to parse this: find workaround
-             { getS      :: s
+             { getOwnId  :: Pid
+             , getS      :: s
              , getClock  :: VectorClock s
              , getDeltas :: DeltaInterval s
              , getAckMap :: AckMap s
@@ -48,10 +49,11 @@ data Message s where
     Ack :: DeltaCvRDT s => Pid -> VectorClock s -> Message s
 
 -- Initialize δCvRDT
-initDeltaCvRDTState :: DeltaCvRDT s => AggregateState s
-initDeltaCvRDTState =
+initDeltaCvRDTState :: DeltaCvRDT s => Pid -> AggregateState s
+initDeltaCvRDTState ownId =
     AggregateState
-    { getS      = bottom
+    { getOwnId  = ownId
+    , getS      = bottom
     , getClock  = bottom
     , getDeltas = Seq.empty
     , getAckMap = Map.empty
@@ -71,19 +73,19 @@ initDeltaCvRDTState =
 --
 onOperation ::
        DeltaCvRDT s
-    => Pid
-    -> Ops s
+    => Ops s
     -> KeyType s
     -> ValueType s
     -> AggregateState s
     -> AggregateState s
-onOperation ownId op key value aggregateState =
+onOperation op key value aggregateState =
     aggregateState {getS = x', getClock = clock', getDeltas = deltas'}
   where
+    ownId   = getOwnId aggregateState
     x       = getS aggregateState
     clock   = getClock aggregateState
     deltas  = getDeltas aggregateState
-    d       = deltaMutation ownId op key value x
+    d       = deltaMutation op key value x
     x'      = x \/ d
     clock'  = increment clock ownId
     deltas' = deltas |> (clock', d)
@@ -119,7 +121,7 @@ onReceive _ (Ack senderId receivedRemoteClock) aggregateState =
 onReceive ownId (Deltas senderId deltas) aggregateState =
     if sendersLatestClock <= ownClock
         then aggregateState -- deltas contain nothing new
-        else AggregateState
+        else aggregateState
                  { getS      = finalState
                  , getClock  = finalClock
                  , getDeltas = ownDeltas'
