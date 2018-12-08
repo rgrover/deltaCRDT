@@ -4,7 +4,6 @@ module CRDT.Algorithms where
 import           CRDT.CvRDT       (CvRDT (..))
 import           CRDT.DeltaCvRDT  (DeltaCvRDT (..))
 
-import           Misc.Pid
 import           Misc.VectorClock as VectorClock (VectorClock (..),
                                                   increment, max)
 
@@ -29,12 +28,12 @@ type DeltaInterval s = Seq (VectorClock s, s)
 -- neighbor j, the largest clock b for all delta-intervals
 -- acknowledged by j. Ai[i] should match a process's own vector clock.
 -- Note: this map may be held in volatile storage.
-type AckMap s = Map Pid (VectorClock s)
+type AckMap s = Map (ReplicaId s) (VectorClock s)
 
 data AggregateState s where
     AggregateState ::
          --DeltaCvRDT s => --TODO: hindent fails to parse this: find workaround
-             { getOwnId  :: Pid
+             { getOwnId  :: ReplicaId s
              , getS      :: s
              , getClock  :: VectorClock s
              , getDeltas :: DeltaInterval s
@@ -45,11 +44,11 @@ data AggregateState s where
 -- clocks--i.e. DeltaInterval--or it can be an acknowledgement for
 -- previously sent deltas
 data Message s where
-    Deltas :: DeltaCvRDT s => Pid -> DeltaInterval s -> Message s
-    Ack :: DeltaCvRDT s => Pid -> VectorClock s -> Message s
+    Deltas :: DeltaCvRDT s => ReplicaId s -> DeltaInterval s -> Message s
+    Ack :: DeltaCvRDT s => ReplicaId s -> VectorClock s -> Message s
 
 -- Initialize δCvRDT
-initDeltaCvRDTState :: DeltaCvRDT s => Pid -> AggregateState s
+initDeltaCvRDTState :: DeltaCvRDT s => ReplicaId s -> AggregateState s
 initDeltaCvRDTState ownId =
     AggregateState
     { getOwnId  = ownId
@@ -92,7 +91,7 @@ onOperation op key value aggregateState =
 
 onReceive ::
        DeltaCvRDT s
-    => Pid
+    => ReplicaId s
     -> Message s
     -> AggregateState s
     -> AggregateState s
@@ -176,7 +175,10 @@ onReceive ownId (Deltas senderId deltas) aggregateState =
 --
 --           return (Deltas, d, ci)
 periodicSendTo ::
-       DeltaCvRDT s => AggregateState s -> Pid -> Maybe (Message s)
+       DeltaCvRDT s
+    => AggregateState s
+    -> ReplicaId s
+    -> Maybe (Message s)
 periodicSendTo aggregateState receiver =
     if ownClock <= knownRemoteClock
         then Nothing
@@ -210,7 +212,11 @@ periodicGarbageCollect aggregate = aggregate { getDeltas = deltas' }
 
 -- helper function to update the AcknowledgementMap
 updateAckMap ::
-       DeltaCvRDT s => Pid -> VectorClock s -> AckMap s -> AckMap s
+       DeltaCvRDT s
+    => ReplicaId s
+    -> VectorClock s
+    -> AckMap s
+    -> AckMap s
 updateAckMap = insertWith VectorClock.max
 
 -- helper function to select potentially interesting deltas from an

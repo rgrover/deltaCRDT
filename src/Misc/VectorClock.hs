@@ -11,20 +11,21 @@ module Misc.VectorClock
     ) where
 import           Prelude          hiding (max)
 
-import           CRDT.DeltaCvRDT  (DeltaCvRDT (..))
+import           CRDT.CvRDT       (CvRDT (ReplicaId))
+import           CRDT.DeltaCvRDT  (DeltaCvRDT (EventCounter))
 
 import qualified Data.VectorClock as VC (Relation (..),
                                          VectorClock (..), combine,
                                          empty, incWithDefault, max,
                                          relation)
-import           Misc.Pid         (Pid (..))
 
 import           Algebra.Lattice  (BoundedJoinSemiLattice,
                                    JoinSemiLattice, bottom, (\/))
 
 -- type of vector-clock to help establish causal dependency. This is
--- built atop the CRDT-specific event counter, using Pid as the key.
-newtype VectorClock s = VectorClock (VC.VectorClock Pid (EventCounter s))
+-- built atop the CRDT-specific event counter, using ReplicaId as the key.
+newtype VectorClock s =
+    VectorClock (VC.VectorClock (ReplicaId s) (EventCounter s))
 
 instance DeltaCvRDT s => JoinSemiLattice (VectorClock s) where
     (\/) :: VectorClock s -> VectorClock s -> VectorClock s
@@ -43,7 +44,7 @@ instance DeltaCvRDT s => Ord (VectorClock s) where
         (c1 == c2) || (c1 `VC.relation` c2 == VC.Causes)
 
 -- increment a process-specific component of a vector clock.
-increment :: DeltaCvRDT s => VectorClock s -> Pid -> VectorClock s
+increment :: DeltaCvRDT s => VectorClock s -> ReplicaId s -> VectorClock s
 increment (VectorClock c) ownId =
     VectorClock $ VC.incWithDefault ownId c 0
 
