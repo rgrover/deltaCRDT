@@ -36,7 +36,7 @@ data AggregateState s where
              { getOwnId  :: ReplicaId s
              , getS      :: s
              , getClock  :: VectorClock s
-             , getDeltas :: DeltaInterval s
+             , getDeltas :: DeltaInterval s -- delta group buffered for xmit
              , getAckMap :: AckMap s
              } -> AggregateState s
 
