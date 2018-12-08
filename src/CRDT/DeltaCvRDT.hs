@@ -3,7 +3,6 @@
 module CRDT.DeltaCvRDT where
 
 import           CRDT.CvRDT
-import           Misc.Pid
 
 import           Algebra.Lattice (BoundedJoinSemiLattice)
 

@@ -3,8 +3,6 @@
 
 module CRDT.CvRDT where
 
-import           Misc.Pid
-
 import           Algebra.Lattice (BoundedJoinSemiLattice, (\/))
 
 -- Convergent replicated data types (eventually consistent based on
@@ -19,14 +17,17 @@ import           Algebra.Lattice (BoundedJoinSemiLattice, (\/))
 -- collection of states can be joined to form a least-upper-bound.
 class ( BoundedJoinSemiLattice s
       , Eq s
-      , Show (Ops s)
+      , Ord (ReplicaId s)
+      , Show (ReplicaId s)
       , Eq (Ops s)
-      , Show (KeyType s)
+      , Show (Ops s)
       , Ord (KeyType s)
+      , Show (KeyType s)
       , Eq (ValueType s)
       ) =>
       CvRDT s
     where
+    type ReplicaId s :: *
     type Ops s       :: * -- Enumeration type for permitted operations
     type KeyType s   :: *
     type ValueType s :: *
