@@ -32,11 +32,11 @@ type AckMap s = Map (ReplicaId s) (VectorClock s)
 
 data AggregateState s where
     AggregateState ::
-         --DeltaCvRDT s => --TODO: hindent fails to parse this: find workaround
+         DeltaCvRDT s => 
              { getOwnId  :: ReplicaId s
              , getS      :: s
              , getClock  :: VectorClock s
-             , getDeltas :: DeltaInterval s
+             , getDeltas :: DeltaInterval s -- delta group buffered for xmit
              , getAckMap :: AckMap s
              } -> AggregateState s
 
@@ -72,7 +72,7 @@ initDeltaCvRDTState ownId =
 --
 onOperation ::
        DeltaCvRDT s
-    => Ops s
+    => OpsType s
     -> KeyType s
     -> ValueType s
     -> AggregateState s
