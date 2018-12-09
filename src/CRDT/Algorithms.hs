@@ -100,7 +100,7 @@ onReceive (Ack senderId receivedRemoteClock) aggregateState =
 --
 -- pseudocode:
 --
--- if deltas not ⊑ Xi // i.e. sender's latest clock isn't <= ownClock
+-- if deltas not ⊑ Xi // i.e. sender's latest clock isn't < ownClock
 --   then
 --     X′i = Xi ⊔ d        // incorporate deltas
 --     c′i = ci + 1        // increment clock
@@ -108,7 +108,7 @@ onReceive (Ack senderId receivedRemoteClock) aggregateState =
 --     sendTo senderId ( ACK finalClock )
 --
 onReceive (Deltas senderId sendersClock deltas) aggregateState =
-    if (sendersClock <= ownClock) || (Seq.null deltas)
+    if (sendersClock < ownClock) || (Seq.null deltas)
         then aggregateState -- nothing to do
         else aggregateState
              { getS      = finalState
@@ -162,7 +162,7 @@ composeAckMessageTo aggregateState = Ack ownId c
 --
 -- pseudocode:
 --
---   if ci <= Ai(j)
+--   if ci < Ai(j)
 --       then return (Deltas {})
 --       else
 --           if Di = {} ∨ min(domain(Di)) > Ai(j) then
@@ -177,7 +177,7 @@ composeDeltasMessageTo ::
     -> AggregateState s
     -> Maybe (Message s)
 composeDeltasMessageTo receiver aggregateState =
-    if ownClock <= knownRemoteClock
+    if ownClock < knownRemoteClock
         then Nothing
         else Just (Deltas ownId ownClock relevantDeltas)
   where
@@ -216,4 +216,4 @@ unknownTo ::
     => DeltaInterval s
     -> VectorClock s
     -> DeltaInterval s
-unknownTo ds c = dropWhileL ((<= c) . clock) ds
+unknownTo ds c = dropWhileL ((< c) . clock) ds
