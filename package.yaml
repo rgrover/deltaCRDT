@@ -51,3 +51,4 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - delta-crdt
+    - QuickCheck
