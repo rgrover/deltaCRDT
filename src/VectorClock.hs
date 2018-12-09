@@ -39,7 +39,13 @@ instance MeetSemiLattice VectorClock where
         minEntry _ (Just x) (Just y) = Just (Prelude.min x y)
 
 instance Ord VectorClock where
-    c1 <= c2 = (c1 == c2) || (c1 `VC.relation` c2 == VC.Causes)
+    c1 `compare` c2 =
+        if c1 == c2
+            then EQ
+            else case (c1 `VC.relation` c2) of
+                     VC.Causes     -> LT
+                     VC.CausedBy   -> GT
+                     VC.Concurrent -> EQ
 
 -- increment a process-specific component of a vector clock.
 increment :: Pid -> VectorClock -> VectorClock
