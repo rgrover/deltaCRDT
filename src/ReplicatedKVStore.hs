@@ -16,8 +16,9 @@ import           Algebra.Lattice (BoundedJoinSemiLattice (..),
 import           Data.Map        as Map (Map (..), empty, lookup,
                                          unionWith)
 
-import           Data.List       (minimumBy)
-import           Data.Ord        (comparing)
+import           Data.Coerce     (coerce)
+import           Data.List       (minimumBy, sortBy)
+import           Data.Ord        (Down (..), comparing)
 
 
 type Clock    = VectorClock.VectorClock
@@ -69,18 +70,37 @@ instance Ord k => CvRDT (ReplicatedKVStore k v) where
             diffs = ps `minus` ns
         case diffs of
             []          -> Nothing
-            [(_, _, x)] -> Just x -- got a single value
-            xs          ->        -- got a collection of concurrent values
-                let (_, _, value) =
-                        minimumBy (comparing (\(id, _, _) -> id)) xs
-                in Just value
+            [(_, _, v)] -> Just v -- got a single value
+            xs          -> Just $ resolveConcurrency xs
       where
           minus :: [PValue v] -> Maybe [NValue] -> [PValue v]
           minus ps Nothing   = ps
           minus ps (Just ns) = filter (not . (`shadowedBy` ns)) ps
             where
                 shadowedBy :: PValue v -> [NValue] -> Bool
-                shadowedBy (_, pclock, _) = any (pclock <=)
+                shadowedBy (_, pclock, _) = any (pclock <)
+
+          -- This helper function resolves concurrency amongst the Add
+          -- entries. It first sorts on the basis of descending clock
+          -- to find the equivalence class with the most recent clock.
+          -- From this equivalence class, an arbitrary choice is made
+          -- based on smallest PID. Note: the comparison function for
+          -- vectorClock treats concurrent clocks as EQ.
+          resolveConcurrency :: [PValue v] -> v
+          resolveConcurrency xs = value
+            where
+              -- coerce to Down to get a reversed comparison function
+              downXs      = coerce xs :: [(Pid, Down Clock, v)]
+              sortedXs    = sortBy (comparing (\(_, c, _) -> c)) downXs
+              sortedXs'   = coerce sortedXs :: [PValue v]
+              (_, clk, _) = head sortedXs' -- first of the latest clocks
+              -- find the equivalence class of concurrent clocks
+              equiv =
+                  takeWhile
+                      (\(_, c, _) -> (c `compare` clk) == EQ)
+                      sortedXs'
+              -- take arbitrary minimum of the equivalence class based on pid
+              (_, _, value) = minimumBy (comparing (\(id, _, _) -> id)) equiv
 
     modify ::
            KVStoreOps
@@ -88,7 +108,8 @@ instance Ord k => CvRDT (ReplicatedKVStore k v) where
         -> v
         -> ReplicatedKVStore k v
         -> ReplicatedKVStore k v
-    modify = undefined
+    modify Add key value store = undefined
+    modify Remove key _ store  = undefined
 
 instance Ord k => DeltaCvRDT (ReplicatedKVStore k v) where
 
@@ -112,5 +133,5 @@ instance Ord k => DeltaCvRDT (ReplicatedKVStore k v) where
         -> v
         -> ReplicatedKVStore k v
         -> ReplicatedKVStore k v
-    deltaMutation Add key value store    = undefined
-    deltaMutation Remove key value store = undefined
+    deltaMutation Add key value store = undefined
+    deltaMutation Remove key _ store  = undefined
