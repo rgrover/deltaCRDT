@@ -13,7 +13,8 @@ import           VectorClock
 import           Algebra.Lattice (BoundedJoinSemiLattice (..),
                                   JoinSemiLattice (..))
 
-import           Data.Map        as Map (Map (..), empty, lookup,
+import           Data.Map        as Map (Map (..), empty, fromList,
+                                         insertWith, lookup,
                                          unionWith)
 
 import           Data.Coerce     (coerce)
@@ -108,8 +109,22 @@ instance Ord k => CvRDT (ReplicatedKVStore k v) where
         -> v
         -> ReplicatedKVStore k v
         -> ReplicatedKVStore k v
-    modify Add key value store = undefined
-    modify Remove key _ store  = undefined
+    modify Add key value store = store' {getPSet = pSet'}
+      where
+        store' = incrementClock store
+        clock' = getClock store'
+        ownId  = getOwnId store
+        entry  = [(ownId, clock', value)]
+        pSet   = getPSet store
+        pSet'  = Map.insertWith (++) key entry pSet
+
+    modify Remove key _ store  = store' {getNSet = nSet'}
+      where
+        store' = incrementClock store
+        clock' = getClock store'
+        entry  = [clock']
+        nSet   = getNSet store
+        nSet'  = Map.insertWith (++) key entry nSet
 
 instance Ord k => DeltaCvRDT (ReplicatedKVStore k v) where
 
@@ -133,5 +148,19 @@ instance Ord k => DeltaCvRDT (ReplicatedKVStore k v) where
         -> v
         -> ReplicatedKVStore k v
         -> ReplicatedKVStore k v
-    deltaMutation Add key value store = undefined
-    deltaMutation Remove key _ store  = undefined
+    deltaMutation Add key value store =
+        store' { getPSet = pSet, getNSet = Map.empty }
+      where
+        store' = incrementClock store
+        clock' = getClock store'
+        ownId  = getOwnId store
+        entry  = [(ownId, clock', value)]
+        pSet   = Map.fromList [(key, entry)]
+
+    deltaMutation Remove key _ store =
+        store' { getPSet = Map.empty, getNSet = nSet }
+      where
+        store' = incrementClock store
+        clock' = getClock store'
+        entry  = [clock']
+        nSet   = Map.fromList [(key, entry)]
