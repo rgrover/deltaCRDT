@@ -18,7 +18,7 @@ import           Data.Map        as Map (Map (..), empty, fromList,
                                          unionWith)
 
 import           Data.Coerce     (coerce)
-import           Data.List       (minimumBy, sortBy)
+import           Data.List       (minimumBy, sort, sortBy)
 import           Data.Ord        (Down (..), comparing)
 
 
@@ -26,11 +26,14 @@ type Clock    = VectorClock.VectorClock
 type PValue v = (Pid, Clock, v)--P-set{key} is a collection of this value-type
 type NValue   = Clock          --N-set{key} is a collection of this value-type
 
+type PValueSet v = [PValue v]
+type NValueSet   = [NValue]
+
 data ReplicatedKVStore k v = Store
     { getClock :: Clock
     , getOwnId :: Pid
-    , getPSet  :: Map k [PValue v]
-    , getNSet  :: Map k [NValue]
+    , getPSet  :: Map k (PValueSet v)
+    , getNSet  :: Map k NValueSet
     }
 
 -- type for operations permitted on the KVStore
@@ -43,8 +46,8 @@ instance Ord k => JoinSemiLattice (ReplicatedKVStore k v) where
         Store
         { getClock = getClock s1 \/ getClock s2
         , getOwnId = getOwnId s1 -- we assume that s2 is a delta mutation
-        , getPSet  = unionWith (++) (getPSet s1) (getPSet s2)
-        , getNSet  = unionWith (++) (getNSet s1) (getNSet s2)
+        , getPSet  = unionWith mergePSets (getPSet s1) (getPSet s2)
+        , getNSet  = unionWith mergeNSets (getNSet s1) (getNSet s2)
         }
 
 instance Ord k => CvRDT (ReplicatedKVStore k v) where
@@ -74,11 +77,11 @@ instance Ord k => CvRDT (ReplicatedKVStore k v) where
             [(_, _, v)] -> Just v -- got a single value
             xs          -> Just $ resolveConcurrency xs
       where
-          minus :: [PValue v] -> Maybe [NValue] -> [PValue v]
+          minus :: PValueSet v -> Maybe NValueSet -> PValueSet v
           minus ps Nothing   = ps
           minus ps (Just ns) = filter (not . (`shadowedBy` ns)) ps
             where
-                shadowedBy :: PValue v -> [NValue] -> Bool
+                shadowedBy :: PValue v -> NValueSet -> Bool
                 shadowedBy (_, pclock, _) = any (pclock <)
 
           -- This helper function resolves concurrency amongst the Add
@@ -87,19 +90,10 @@ instance Ord k => CvRDT (ReplicatedKVStore k v) where
           -- From this equivalence class, an arbitrary choice is made
           -- based on smallest PID. Note: the comparison function for
           -- vectorClock treats concurrent clocks as EQ.
-          resolveConcurrency :: [PValue v] -> v
+          resolveConcurrency :: PValueSet v -> v
           resolveConcurrency xs = value
             where
-              -- coerce to Down to get a reversed comparison function
-              downXs      = coerce xs :: [(Pid, Down Clock, v)]
-              sortedXs    = sortBy (comparing (\(_, c, _) -> c)) downXs
-              sortedXs'   = coerce sortedXs :: [PValue v]
-              (_, clk, _) = head sortedXs' -- first of the latest clocks
-              -- find the equivalence class of concurrent clocks
-              equiv =
-                  takeWhile
-                      (\(_, c, _) -> (c `compare` clk) == EQ)
-                      sortedXs'
+              equiv = bestPSubset xs
               -- take arbitrary minimum of the equivalence class based on pid
               (_, _, value) = minimumBy (comparing (\(id, _, _) -> id)) equiv
 
@@ -116,7 +110,7 @@ instance Ord k => CvRDT (ReplicatedKVStore k v) where
         ownId  = getOwnId store
         entry  = [(ownId, clock', value)]
         pSet   = getPSet store
-        pSet'  = Map.insertWith (++) key entry pSet
+        pSet'  = Map.insertWith mergePSets key entry pSet
 
     modify Remove key _ store  = store' {getNSet = nSet'}
       where
@@ -124,7 +118,7 @@ instance Ord k => CvRDT (ReplicatedKVStore k v) where
         clock' = getClock store'
         entry  = [clock']
         nSet   = getNSet store
-        nSet'  = Map.insertWith (++) key entry nSet
+        nSet'  = Map.insertWith mergeNSets key entry nSet
 
 instance Ord k => DeltaCvRDT (ReplicatedKVStore k v) where
 
@@ -164,3 +158,39 @@ instance Ord k => DeltaCvRDT (ReplicatedKVStore k v) where
         clock' = getClock store'
         entry  = [clock']
         nSet   = Map.fromList [(key, entry)]
+
+bestPSubset :: PValueSet v -> PValueSet v
+bestPSubset xs = equiv
+    -- coerce clocks as Down to get a reversed comparison function
+  where
+    toDown               = (\(pid, c, v) -> (pid, Down c, v))
+    fromDown             = (\(pid, Down c, v) -> (pid, c, v))
+    downXs               = map toDown xs
+    sortedXs             = sortBy (comparing (\(_, c, _) -> c)) downXs
+    sortedXs'            = map fromDown sortedXs
+    (_, firstBestClk, _) = head sortedXs' -- first of the latest clocks
+    -- find the equivalence class of concurrent clocks
+    equiv =
+        takeWhile
+            (\(_, c, _) -> (c `compare` firstBestClk) == EQ)
+            sortedXs'
+
+mergePSets :: PValueSet v -> PValueSet v -> PValueSet v
+mergePSets = (\a b -> bestPSubset (a ++ b))
+
+bestNSubset :: NValueSet -> NValueSet
+bestNSubset xs = equiv
+    -- coerce clocks as Down to get a reversed comparison function
+  where
+    downXs       = map Down xs
+    sortedXs     = sort downXs
+    sortedXs'    = map (\ (Down x) -> x) sortedXs
+    firstBestClk = head sortedXs' -- first of the latest clocks
+    -- find the equivalence class of concurrent clocks
+    equiv =
+        takeWhile
+            (\c -> (c `compare` firstBestClk) == EQ)
+            sortedXs'
+
+mergeNSets :: NValueSet -> NValueSet -> NValueSet
+mergeNSets = (\a b -> bestNSubset (a ++ b))
