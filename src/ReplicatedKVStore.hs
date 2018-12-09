@@ -4,33 +4,32 @@
 {-# LANGUAGE TypeFamilies        #-}
 module ReplicatedKVStore where
 
-import           CRDT.CvRDT       (CvRDT (..))
-import           CRDT.DeltaCvRDT  (DeltaCvRDT (..))
-import           CRDT.VectorClock (VectorClock)
+import           CRDT.CvRDT      (CvRDT (..))
+import           CRDT.DeltaCvRDT (DeltaCvRDT (..))
 
-import           Algebra.Lattice  (BoundedJoinSemiLattice (..),
-                                   JoinSemiLattice (..))
+import           Pid
+import           VectorClock
 
-import           Data.Map         as Map (Map (..), empty, lookup,
-                                          unionWith)
+import           Algebra.Lattice (BoundedJoinSemiLattice (..),
+                                  JoinSemiLattice (..))
 
-import           Data.List        (minimumBy)
-import           Data.Ord         (comparing)
-import           Data.Word        (Word64)
+import           Data.Map        as Map (Map (..), empty, lookup,
+                                         unionWith)
 
-type Clock k v   = VectorClock (ReplicatedKVStore k v)
-type PValue k v  = (Pid, Clock k v, v)
-type NValue k v  = Clock k v
+import           Data.List       (minimumBy)
+import           Data.Ord        (comparing)
 
-data ReplicatedKVStore k v =
-    Store { getPSet :: Map k [PValue k v]
-          , getNSet :: Map k [NValue k v]
-          }
 
--- type for ProcessID
-newtype Pid =
-    P Word
-    deriving (Eq, Ord, Show)
+type Clock    = VectorClock.VectorClock
+type PValue v = (Pid, Clock, v)--P-set{key} is a collection of this value-type
+type NValue   = Clock          --N-set{key} is a collection of this value-type
+
+data ReplicatedKVStore k v = Store
+    { getClock :: Clock
+    , getOwnId :: Pid
+    , getPSet  :: Map k [PValue v]
+    , getNSet  :: Map k [NValue]
+    }
 
 -- type for operations permitted on the KVStore
 data KVStoreOps =
@@ -40,18 +39,28 @@ data KVStoreOps =
 instance Ord k => JoinSemiLattice (ReplicatedKVStore k v) where
     s1 \/ s2 =
         Store
-        { getPSet = unionWith (++) (getPSet s1) (getPSet s2)
-        , getNSet = unionWith (++) (getNSet s1) (getNSet s2)
+        { getClock = getClock s1 \/ getClock s2
+        , getOwnId = getOwnId s1 -- we assume that s2 is a delta mutation
+        , getPSet  = unionWith (++) (getPSet s1) (getPSet s2)
+        , getNSet  = unionWith (++) (getNSet s1) (getNSet s2)
         }
-
-instance Ord k => BoundedJoinSemiLattice (ReplicatedKVStore k v) where
-    bottom = Store { getPSet = Map.empty, getNSet = Map.empty }
 
 instance Ord k => CvRDT (ReplicatedKVStore k v) where
     type ReplicaId (ReplicatedKVStore k v) = Pid
     type OpsType (ReplicatedKVStore k v)   = KVStoreOps
     type KeyType (ReplicatedKVStore k v)   = k
     type ValueType (ReplicatedKVStore k v) = v
+
+    pid :: ReplicatedKVStore k v -> Pid
+    pid = getOwnId
+
+    initialize :: Pid -> ReplicatedKVStore k v
+    initialize pid =
+        Store { getClock = bottom
+              , getOwnId = pid
+              , getPSet  = Map.empty
+              , getNSet  = Map.empty
+              }
 
     query :: ReplicatedKVStore k v -> k -> Maybe v
     query store key = do
@@ -66,11 +75,11 @@ instance Ord k => CvRDT (ReplicatedKVStore k v) where
                         minimumBy (comparing (\(id, _, _) -> id)) xs
                 in Just value
       where
-          minus :: [PValue k v] -> Maybe [NValue k v] -> [PValue k v]
+          minus :: [PValue v] -> Maybe [NValue] -> [PValue v]
           minus ps Nothing   = ps
           minus ps (Just ns) = filter (not . (`shadowedBy` ns)) ps
             where
-                shadowedBy :: PValue k v -> [NValue k v] -> Bool
+                shadowedBy :: PValue v -> [NValue] -> Bool
                 shadowedBy (_, pclock, _) = any (pclock <=)
 
     modify ::
@@ -82,7 +91,20 @@ instance Ord k => CvRDT (ReplicatedKVStore k v) where
     modify = undefined
 
 instance Ord k => DeltaCvRDT (ReplicatedKVStore k v) where
-    type EventCounter (ReplicatedKVStore k v) = Word64
+
+    type VectorClock (ReplicatedKVStore k v) = Clock
+
+    -- fetch current clock from a given state
+    clock :: ReplicatedKVStore k v -> Clock
+    clock = getClock
+
+    -- increment a replica-specific component of a vector-clock
+    incrementClock :: ReplicatedKVStore k v -> ReplicatedKVStore k v
+    incrementClock store = store {getClock = c'}
+      where
+        ownId = pid store
+        c     = clock store
+        c'    = VectorClock.increment ownId c
 
     deltaMutation ::
            KVStoreOps

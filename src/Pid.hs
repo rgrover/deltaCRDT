@@ -1,4 +1,4 @@
-module Misc.Pid (Pid(..)) where
+module Pid (Pid(..)) where
 
 -- type for ProcessID
 newtype Pid =

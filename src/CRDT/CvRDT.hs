@@ -3,7 +3,7 @@
 
 module CRDT.CvRDT where
 
-import           Algebra.Lattice (BoundedJoinSemiLattice, (\/))
+import           Algebra.Lattice (JoinSemiLattice, (\/))
 
 -- Convergent replicated data types (eventually consistent based on
 -- state).
@@ -15,17 +15,25 @@ import           Algebra.Lattice (BoundedJoinSemiLattice, (\/))
 --
 -- The state forms a join semilattice, which means that any finite
 -- collection of states can be joined to form a least-upper-bound.
-class ( BoundedJoinSemiLattice s
+class ( JoinSemiLattice s
       , Ord (ReplicaId s)
       , Eq (OpsType s)
       , Ord (KeyType s)
       ) =>
       CvRDT s
     where
-    type ReplicaId s :: *
+
     type OpsType s   :: * -- Enumeration type for permitted operations
     type KeyType s   :: *
     type ValueType s :: *
+
+    type ReplicaId s :: *
+
+    -- extract replica-id from state
+    pid :: s -> ReplicaId s
+
+    -- initialize state with defaults and a given id
+    initialize :: ReplicaId s -> s
 
     -- local fetch based on current state
     query :: s -> KeyType s -> Maybe (ValueType s)
