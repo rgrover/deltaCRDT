@@ -5,6 +5,7 @@ import           CRDT.Core.AggregateState (AggregateState (..),
                                            DeltaInterval)
 import           CRDT.Core.CvRDT          (CvRDT (..))
 import           CRDT.Core.DeltaCvRDT     (DeltaCvRDT (..))
+import           CRDT.Core.Message
 
 import           Algebra.Lattice          (bottom, (/\), (\/))
 import           Data.Map.Strict          as Map (Map, empty,
@@ -14,16 +15,6 @@ import           Data.Sequence            as Seq (Seq, dropWhileL,
                                                   empty,
                                                   foldlWithIndex,
                                                   null, (><), (|>))
-
--- A message between two processes can either hold Deltas along with
--- clocks--i.e. DeltaInterval--or it can be an acknowledgement for
--- previously sent deltas
-data Message s
-    = Ack (ReplicaId s)        -- sender's id
-          (VectorClock s)      -- sender's clock
-    | Deltas (ReplicaId s)     -- sender's id
-             (VectorClock s)   -- sender's clock
-             (DeltaInterval s) -- deltas
 
 -- Initialize δCvRDT
 initDeltaCvRDTState :: DeltaCvRDT s => ReplicaId s -> AggregateState s
