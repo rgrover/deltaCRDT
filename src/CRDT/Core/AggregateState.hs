@@ -1,11 +1,14 @@
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts   #-}
+{-# LANGUAGE GADTs              #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies       #-}
 module CRDT.Core.AggregateState
     ( AggregateState(..)
     , DeltaInterval
     ) where
 
 import           CRDT.Core.CvRDT      (ReplicaId)
-import           CRDT.Core.DeltaCvRDT (VectorClock)
+import           CRDT.Core.DeltaCvRDT (DeltaCvRDT, VectorClock)
 
 import           Data.Map.Strict      as Map (Map)
 import           Data.Sequence        as Seq (Seq)
@@ -23,10 +26,12 @@ type DeltaInterval s = Seq s
 -- Note: this map may be held in volatile storage.
 type AckMap s = Map (ReplicaId s) (VectorClock s)
 
-data family AggregateState s :: *
+data AggregateState s where
+    AggregateState ::
+        (DeltaCvRDT s, Show(ReplicaId s), Show s, Show (VectorClock s)) =>
+        { getS :: s
+        , getDeltas :: DeltaInterval s
+        , getAckMap :: Map (ReplicaId s) (VectorClock s)
+        } -> AggregateState s
 
-data instance  AggregateState s =
-    AggregateState { getS :: s
-                   , getDeltas :: DeltaInterval s
-                   , getAckMap :: AckMap s
-                   }
+deriving instance Show (AggregateState s)

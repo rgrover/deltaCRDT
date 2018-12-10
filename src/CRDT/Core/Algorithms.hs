@@ -1,10 +1,12 @@
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeFamilies     #-}
 module CRDT.Core.Algorithms where
 
 import           CRDT.Core.AggregateState (AggregateState (..),
                                            DeltaInterval)
 import           CRDT.Core.CvRDT          as CvRDT (CvRDT (..))
-import           CRDT.Core.DeltaCvRDT     (DeltaCvRDT (..))
+import           CRDT.Core.DeltaCvRDT     as DeltaCvRDT (DeltaCvRDT (..),
+                                                         clock)
 import           CRDT.Core.Message
 
 import           Algebra.Lattice          (bottom, (/\), (\/))
@@ -17,7 +19,10 @@ import           Data.Sequence            as Seq (Seq, dropWhileL,
                                                   null, (><), (|>))
 
 -- Initialize δCvRDT
-initialize :: DeltaCvRDT s => ReplicaId s -> AggregateState s
+initialize ::
+       (DeltaCvRDT s, Show s, Show (VectorClock s))
+    => ReplicaId s
+    -> AggregateState s
 initialize ownId =
     AggregateState
     { getS      = CvRDT.initialize ownId
@@ -29,6 +34,9 @@ initialize ownId =
 pid :: DeltaCvRDT s => AggregateState s -> ReplicaId s
 pid = CvRDT.pid . getS
 
+clock :: DeltaCvRDT s => AggregateState s -> VectorClock s
+clock = DeltaCvRDT.clock . getS
+
 -- query a key
 query ::
        DeltaCvRDT s
@@ -37,7 +45,8 @@ query ::
     -> Maybe (ValueType s)
 query = (CvRDT.query . getS)
 
--- To be called to perform an operation on the CvRDT state.
+-- To be called to perform an operation on the CvRDT state. The nature
+-- of the operation is specific to the implementation.
 --
 --   ci :: VectorClock   // local clock
 --   Di :: DeltaInterval // localDeltas i.e. [(clock, delta)]
@@ -49,14 +58,14 @@ query = (CvRDT.query . getS)
 --   X′i = Xi ⊔ d // c'i is also clock X'i
 --   D′i = Di { c'i → d }
 --
-onOperation ::
+modify ::
        DeltaCvRDT s
     => OpsType s
     -> KeyType s
     -> ValueType s
     -> AggregateState s
     -> AggregateState s
-onOperation op key value aggregateState =
+modify op key value aggregateState =
     aggregateState {getS = x', getDeltas = deltas'}
   where
     x       = getS aggregateState
@@ -103,7 +112,7 @@ onReceive (Deltas senderId sendersClock deltas) aggregateState =
   where
     x               = getS aggregateState
     ownPid          = CvRDT.pid x
-    ownClock        = clock x
+    ownClock        = DeltaCvRDT.clock x
     x'              = incrementClock x
     ownDeltas       = getDeltas aggregateState
     aMap            = getAckMap aggregateState
@@ -126,7 +135,7 @@ composeAckMessageTo ::
 composeAckMessageTo aggregateState = Ack ownId c
     where x     = getS aggregateState
           ownId = CvRDT.pid x
-          c     = clock x
+          c     = DeltaCvRDT.clock x
 
 -- Prepare a Delta message to be sent to a neighbour. The user
 -- of this library is expected to send Delta messages periodically in a
@@ -168,7 +177,7 @@ composeDeltasMessageTo receiver aggregateState =
   where
     x                = getS aggregateState
     ownId            = CvRDT.pid x
-    ownClock         = clock x
+    ownClock         = DeltaCvRDT.clock x
     ackMap           = getAckMap aggregateState
     knownRemoteClock = findWithDefault bottom receiver ackMap
     deltas           = getDeltas aggregateState
@@ -201,4 +210,4 @@ unknownTo ::
     => DeltaInterval s
     -> VectorClock s
     -> DeltaInterval s
-unknownTo ds c = dropWhileL ((< c) . clock) ds
+unknownTo ds c = dropWhileL ((< c) . DeltaCvRDT.clock) ds
