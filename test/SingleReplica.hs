@@ -15,7 +15,8 @@ import           Test.QuickCheck
 --   * check than an arbitrary query fails
 prop_initialize :: Word -> Int -> Bool
 prop_initialize n key =
-    and [pid state == P n, query state key == Nothing]
+    pid state == P n
+    && query state key == Nothing
   where
     state :: AggregateState (ReplicatedKVStore Int String)
     state = initialize (P n)
@@ -27,10 +28,9 @@ prop_initialize n key =
 prop_singleInsert :: Int -> Int -> String -> Property
 prop_singleInsert key key' value =
     (key /= key') ==>
-        and [ query state' key == Just value
-            , query state' key' == Nothing  -- lookup of a different key
-            , bottom < clock state'
-            ]
+        query state' key == Just value
+        && query state' key' == Nothing  -- lookup of a different key
+        && bottom < clock state'
   where
     state :: AggregateState (ReplicatedKVStore Int String)
     state  = initialize (P 1)
