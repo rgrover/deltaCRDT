@@ -1,4 +1,4 @@
-module Pid (Pid(..)) where
+module Impl.KVStore.Pid (Pid(..)) where
 
 -- type for ProcessID
 newtype Pid =

@@ -2,24 +2,25 @@
 {-# LANGUAGE InstanceSigs        #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies        #-}
-module ReplicatedKVStore where
+module Impl.KVStore.ReplicatedKVStore where
 
-import           CRDT.CvRDT      (CvRDT (..))
-import           CRDT.DeltaCvRDT (DeltaCvRDT (..))
+import           CRDT.Core.CvRDT          (CvRDT (..))
+import           CRDT.Core.DeltaCvRDT     (DeltaCvRDT (..))
 
-import           Pid
-import           VectorClock
+import           Impl.KVStore.Pid
+import           Impl.KVStore.VectorClock as VectorClock
 
-import           Algebra.Lattice (BoundedJoinSemiLattice (..),
-                                  JoinSemiLattice (..))
+import           Algebra.Lattice          (BoundedJoinSemiLattice (..),
+                                           JoinSemiLattice (..))
 
-import           Data.Map        as Map (Map (..), empty, fromList,
-                                         insertWith, lookup,
-                                         unionWith)
+import           Data.Map                 as Map (Map (..), empty,
+                                                  fromList,
+                                                  insertWith, lookup,
+                                                  unionWith)
 
-import           Data.Coerce     (coerce)
-import           Data.List       (minimumBy, sort, sortBy)
-import           Data.Ord        (Down (..), comparing)
+import           Data.Coerce              (coerce)
+import           Data.List                (minimumBy, sort, sortBy)
+import           Data.Ord                 (Down (..), comparing)
 
 
 type Clock    = VectorClock.VectorClock

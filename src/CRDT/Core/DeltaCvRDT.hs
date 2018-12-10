@@ -1,8 +1,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies     #-}
-module CRDT.DeltaCvRDT where
+module CRDT.Core.DeltaCvRDT where
 
-import           CRDT.CvRDT
+import           CRDT.Core.CvRDT
 
 import           Algebra.Lattice (BoundedJoinSemiLattice,
                                   MeetSemiLattice)

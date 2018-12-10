@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies     #-}
 
-module CRDT.CvRDT where
+module CRDT.Core.CvRDT where
 
 import           Algebra.Lattice (JoinSemiLattice, (\/))
 

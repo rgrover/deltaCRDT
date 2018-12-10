@@ -1,9 +1,9 @@
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE InstanceSigs         #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-module VectorClock (VectorClock, increment) where
+module Impl.KVStore.VectorClock (VectorClock, increment) where
 
-import           Pid
+import           Impl.KVStore.Pid
 
 import           Algebra.Lattice  (BoundedJoinSemiLattice (..),
                                    BoundedLattice (..),

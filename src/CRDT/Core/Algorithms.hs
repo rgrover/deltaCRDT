@@ -1,37 +1,19 @@
 {-# LANGUAGE TypeFamilies #-}
-module CRDT.Algorithms where
+module CRDT.Core.Algorithms where
 
-import           CRDT.CvRDT      (CvRDT (..))
-import           CRDT.DeltaCvRDT (DeltaCvRDT (..))
+import           CRDT.Core.AggregateState (AggregateState (..),
+                                           DeltaInterval)
+import           CRDT.Core.CvRDT          (CvRDT (..))
+import           CRDT.Core.DeltaCvRDT     (DeltaCvRDT (..))
 
-import           Algebra.Lattice (bottom, (/\), (\/))
-import           Data.Map.Strict as Map (Map, empty, findWithDefault,
-                                         insertWith, toList)
-import           Data.Sequence   as Seq (Seq, dropWhileL, empty,
-                                         foldlWithIndex, null, (><),
-                                         (|>))
-
--- A sequence of deltas. This is used to exchange collections of
--- deltas between processes, and also to maintain a local copy of
--- deltas waiting to be disseminated.
---
--- Note: Delta-Intervals may be held in volatile storage.
-type DeltaInterval s = Seq s
-
--- Each process i keeps an acknowledgment map Ai that stores, for each
--- neighbor j, the largest clock b for all delta-intervals
--- acknowledged by j. Ai[i] should match a process's own vector clock.
--- Note: this map may be held in volatile storage.
-type AckMap s = Map (ReplicaId s) (VectorClock s)
-
-data family AggregateState s :: *
-
-data instance AggregateState s =
-    AggregateState
-        { getS      :: s
-        , getDeltas :: DeltaInterval s
-        , getAckMap :: AckMap s
-        }
+import           Algebra.Lattice          (bottom, (/\), (\/))
+import           Data.Map.Strict          as Map (Map, empty,
+                                                  findWithDefault,
+                                                  insertWith, toList)
+import           Data.Sequence            as Seq (Seq, dropWhileL,
+                                                  empty,
+                                                  foldlWithIndex,
+                                                  null, (><), (|>))
 
 -- A message between two processes can either hold Deltas along with
 -- clocks--i.e. DeltaInterval--or it can be an acknowledgement for
