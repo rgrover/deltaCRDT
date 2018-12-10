@@ -4,7 +4,9 @@ module SingleReplica (runTests) where
 import           CRDT.CRDT
 
 import           Impl.KVStore.Pid
-import           Impl.KVStore.ReplicatedKVStore
+import           Impl.KVStore.ReplicatedKVStore (KVStoreOps (..), ReplicatedKVStore (..))
+
+import           Algebra.Lattice                (bottom)
 
 import           Test.QuickCheck
 
@@ -19,14 +21,37 @@ prop_initialize n key =
     state = initialize (P n)
 
 -- initialize with Pid 1; and insert an arbitrary k-v pair
-prop_singleInsert :: Int -> String -> Bool
-prop_singleInsert key value = True
+--   * lookup should succeed
+--   * lookup with a different key should fail
+--   * replica's clock is not bottom
+prop_singleInsert :: Int -> Int -> String -> Property
+prop_singleInsert key key' value =
+    (key /= key') ==>
+        and [ query state' key == Just value
+            , query state' key' == Nothing  -- lookup of a different key
+            , bottom < clock state'
+            ]
   where
     state :: AggregateState (ReplicatedKVStore Int String)
-    state = initialize (P 1)
+    state  = initialize (P 1)
+    state' = modify Add key value state
 
-prop_singleInsertFollowedByQuery :: Int -> Bool
-prop_singleInsertFollowedByQuery i = True
+-- insert an arbitrary k-v pair and then remove it
+--   * lookup following the remove should yield Nothing
+--   * replica's clocks should be increasing
+prop_insertFollowedByRemove :: Int -> String -> Bool
+prop_insertFollowedByRemove key value =
+        query state'' key == Nothing
+        && c < c'
+        && c' < c''
+  where
+    state :: AggregateState (ReplicatedKVStore Int String)
+    state   = initialize (P 1)
+    c       = clock state
+    state'  = modify Add key value state
+    c'      = clock state'
+    state'' = modify Remove key value state'
+    c''     = clock state''
 
 --------------------------
 return []

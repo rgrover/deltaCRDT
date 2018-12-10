@@ -17,6 +17,7 @@ import           Algebra.Lattice (JoinSemiLattice, (\/))
 -- collection of states can be joined to form a least-upper-bound.
 class ( JoinSemiLattice s
       , Ord (ReplicaId s)
+      , Show (ReplicaId s)
       , Eq (OpsType s)
       , Ord (KeyType s)
       ) =>

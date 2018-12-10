@@ -35,7 +35,7 @@ data ReplicatedKVStore k v = Store
     , getOwnId :: Pid
     , getPSet  :: Map k (PValueSet v)
     , getNSet  :: Map k NValueSet
-    }
+    } deriving (Show)
 
 -- type for operations permitted on the KVStore
 data KVStoreOps =
@@ -78,26 +78,25 @@ instance Ord k => CvRDT (ReplicatedKVStore k v) where
             [(_, _, v)] -> Just v -- got a single value
             xs          -> Just $ resolveConcurrency xs
       where
-          minus :: PValueSet v -> Maybe NValueSet -> PValueSet v
-          minus ps Nothing   = ps
-          minus ps (Just ns) = filter (not . (`shadowedBy` ns)) ps
-            where
-                shadowedBy :: PValue v -> NValueSet -> Bool
-                shadowedBy (_, pclock, _) = any (pclock <)
-
-          -- This helper function resolves concurrency amongst the Add
-          -- entries. It first sorts on the basis of descending clock
-          -- to find the equivalence class with the most recent clock.
-          -- From this equivalence class, an arbitrary choice is made
-          -- based on smallest PID. Note: the comparison function for
-          -- vectorClock treats concurrent clocks as EQ.
-          resolveConcurrency :: PValueSet v -> v
-          resolveConcurrency xs = value
-            where
-              equiv = bestPSubset xs
+        minus :: PValueSet v -> Maybe NValueSet -> PValueSet v
+        minus ps Nothing   = ps
+        minus ps (Just ns) = filter (not . (`shadowedBy` ns)) ps
+          where
+            shadowedBy :: PValue v -> NValueSet -> Bool
+            shadowedBy (_, pclock, _) = any (pclock <)
+        -- This helper function resolves concurrency amongst the Add
+        -- entries. It first sorts on the basis of descending clock
+        -- to find the equivalence class with the most recent clock.
+        -- From this equivalence class, an arbitrary choice is made
+        -- based on smallest PID. Note: the comparison function for
+        -- vectorClock treats concurrent clocks as EQ.
+        resolveConcurrency :: PValueSet v -> v
+        resolveConcurrency xs = value
+          where
+            equiv = bestPSubset xs
               -- take arbitrary minimum of the equivalence class based on pid
-              (_, _, value) = minimumBy (comparing (\(id, _, _) -> id)) equiv
-
+            (_, _, value) =
+                minimumBy (comparing (\(id, _, _) -> id)) equiv
     modify ::
            KVStoreOps
         -> k
