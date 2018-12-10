@@ -25,6 +25,8 @@ type AckMap s = Map (ReplicaId s) (VectorClock s)
 
 data family AggregateState s :: *
 
-data instance  AggregateState s = AggregateState{getS :: s,
-                                                 getDeltas :: DeltaInterval s,
-                                                 getAckMap :: AckMap s}
+data instance  AggregateState s =
+    AggregateState { getS :: s
+                   , getDeltas :: DeltaInterval s
+                   , getAckMap :: AckMap s
+                   }

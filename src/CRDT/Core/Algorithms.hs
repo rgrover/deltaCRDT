@@ -3,8 +3,9 @@ module CRDT.Core.Algorithms where
 
 import           CRDT.Core.AggregateState (AggregateState (..),
                                            DeltaInterval)
-import           CRDT.Core.CvRDT          (CvRDT (..))
+import           CRDT.Core.CvRDT          as CvRDT (CvRDT (..))
 import           CRDT.Core.DeltaCvRDT     (DeltaCvRDT (..))
+import           CRDT.Core.Message
 
 import           Algebra.Lattice          (bottom, (/\), (\/))
 import           Data.Map.Strict          as Map (Map, empty,
@@ -15,24 +16,26 @@ import           Data.Sequence            as Seq (Seq, dropWhileL,
                                                   foldlWithIndex,
                                                   null, (><), (|>))
 
--- A message between two processes can either hold Deltas along with
--- clocks--i.e. DeltaInterval--or it can be an acknowledgement for
--- previously sent deltas
-data Message s
-    = Ack (ReplicaId s)        -- sender's id
-          (VectorClock s)      -- sender's clock
-    | Deltas (ReplicaId s)     -- sender's id
-             (VectorClock s)   -- sender's clock
-             (DeltaInterval s) -- deltas
-
 -- Initialize δCvRDT
-initDeltaCvRDTState :: DeltaCvRDT s => ReplicaId s -> AggregateState s
-initDeltaCvRDTState ownId =
+initialize :: DeltaCvRDT s => ReplicaId s -> AggregateState s
+initialize ownId =
     AggregateState
-    { getS      = initialize ownId
+    { getS      = CvRDT.initialize ownId
     , getDeltas = Seq.empty
     , getAckMap = Map.empty
     }
+
+-- fetch replica-id
+pid :: DeltaCvRDT s => AggregateState s -> ReplicaId s
+pid = CvRDT.pid . getS
+
+-- query a key
+query ::
+       DeltaCvRDT s
+    => AggregateState s
+    -> KeyType s
+    -> Maybe (ValueType s)
+query = (CvRDT.query . getS)
 
 -- To be called to perform an operation on the CvRDT state.
 --
@@ -99,7 +102,7 @@ onReceive (Deltas senderId sendersClock deltas) aggregateState =
              }
   where
     x               = getS aggregateState
-    ownPid          = pid x
+    ownPid          = CvRDT.pid x
     ownClock        = clock x
     x'              = incrementClock x
     ownDeltas       = getDeltas aggregateState
@@ -122,7 +125,7 @@ composeAckMessageTo ::
     -> Message s
 composeAckMessageTo aggregateState = Ack ownId c
     where x     = getS aggregateState
-          ownId = pid x
+          ownId = CvRDT.pid x
           c     = clock x
 
 -- Prepare a Delta message to be sent to a neighbour. The user
@@ -164,7 +167,7 @@ composeDeltasMessageTo receiver aggregateState =
         else Just (Deltas ownId ownClock relevantDeltas)
   where
     x                = getS aggregateState
-    ownId            = pid x
+    ownId            = CvRDT.pid x
     ownClock         = clock x
     ackMap           = getAckMap aggregateState
     knownRemoteClock = findWithDefault bottom receiver ackMap

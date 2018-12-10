@@ -1,13 +1,12 @@
 import           Test.QuickCheck
 
-gen :: Gen (Int, String)
-gen = do
-    i <- arbitrary
-    s <- elements ["rohit", "Grover", "test"]
-    return (i,s)
+import qualified SingleReplica
 
-test :: Int -> Int -> Bool
-test a b = a + b == b + a
+import           System.Exit
 
 main :: IO ()
-main = quickCheck test
+main = do
+    good <- and <$> sequence [SingleReplica.runTests]
+    if good
+        then exitSuccess
+        else exitFailure
