@@ -61,6 +61,9 @@ class ( CvRDT s
     -- vector-clock
     incrementClock :: s -> s
 
+    -- update the state's vector-clock by joining with a given clock
+    updateClock :: VectorClock s -> s -> s
+
     -- A delta-mutator mδ is a function, corresponding  to  an  update
     -- operation,  which  takes  a  state X in  a  join-semilattice S
     -- as parameter and returns a delta-mutation mδ(X), also in S.

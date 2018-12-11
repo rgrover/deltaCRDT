@@ -133,6 +133,11 @@ instance Ord k => DeltaCvRDT (ReplicatedKVStore k v) where
         c     = clock store
         c'    = Clock.increment ownId c
 
+    updateClock :: Clock -> ReplicatedKVStore k v -> ReplicatedKVStore k v
+    updateClock c store = store {getClock = c \/ ownClock}
+      where
+        ownClock = clock store
+
     deltaMutation ::
            KVStoreOps
         -> k

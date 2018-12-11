@@ -115,13 +115,14 @@ onReceive (Deltas senderId sendersClock deltas) aggregateState =
     ownPid    = CvRDT.pid x
     ownClock  = DeltaCvRDT.clock x
     x'        = incrementClock x
+    x''       = updateClock sendersClock x'
     ownDeltas = getDeltas aggregateState
     aMap      = getAckMap aggregateState
 
     usefulDeltas = deltas `unknownTo` ownClock
     ownDeltas'   = ownDeltas >< usefulDeltas
 
-    finalState = foldlWithIndex mergeDelta x' usefulDeltas
+    finalState = foldlWithIndex mergeDelta x'' usefulDeltas
     mergeDelta :: DeltaCvRDT s => s -> Int -> s -> s
     mergeDelta s1 _ s2 = s1 \/ s2
 
