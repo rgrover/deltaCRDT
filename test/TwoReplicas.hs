@@ -277,6 +277,69 @@ prop_concurrentInsertAndRemoveResultsInInsertBeingRetained key value =
     s1'' = onReceive (fromJust m21) s1'
     s2'' = onReceive (fromJust m12) s2'
 
+-- multiple concurrent inserts for the same key, followed by message
+-- exchange to achieve consistency, followed by remove on one
+-- replica.
+prop_concurrentInsertsFollowedBySingleRemove ::
+    Int -> String -> String -> Property
+prop_concurrentInsertsFollowedBySingleRemove key v1 v2 =
+    v1 /= v2 ==>
+        isNothing (query s2''' key)
+        && isNothing (query s1''' key)
+  where
+    s1 :: AggregateState (ReplicatedKVStore Int String)
+    s1 = initialize (P 1)
+    s2 :: AggregateState (ReplicatedKVStore Int String)
+    s2  = initialize (P 2)
+
+    s1' = modify Add key v1 s1
+    s2' = modify Add key v2 s2
+
+    m12 = composeMessageTo (P 2) s1'
+    m21 = composeMessageTo (P 1) s2'
+
+    s1'' = onReceive (fromJust m21) s1'
+    s2'' = onReceive (fromJust m12) s2'
+
+    s1''' = modify Remove key undefined s1''
+
+    m12'  = composeMessageTo (P 2) s1'''
+    s2''' = onReceive (fromJust m12') s2''
+
+-- multiple concurrent inserts for the same key, followed by message
+-- exchange to achieve consistency, followed by multiple
+-- concurrent removes. The key should be observed to be unavailable on
+-- both replicas after message exchanges.
+prop_concurrentInsertsFollowedByConcurrentRemoves ::
+    Int -> String -> String -> Property
+prop_concurrentInsertsFollowedByConcurrentRemoves key v1 v2 =
+    v1 /= v2 ==>
+        isNothing (query s2'''' key)
+        && isNothing (query s1'''' key)
+  where
+    s1 :: AggregateState (ReplicatedKVStore Int String)
+    s1 = initialize (P 1)
+    s2 :: AggregateState (ReplicatedKVStore Int String)
+    s2  = initialize (P 2)
+
+    s1' = modify Add key v1 s1
+    s2' = modify Add key v2 s2
+
+    m12 = composeMessageTo (P 2) s1'
+    m21 = composeMessageTo (P 1) s2'
+
+    s1'' = onReceive (fromJust m21) s1'
+    s2'' = onReceive (fromJust m12) s2'
+
+    s1''' = modify Remove key undefined s1''
+    s2''' = modify Remove key undefined s2''
+
+    m12'  = composeMessageTo (P 2) s1'''
+    m21'  = composeMessageTo (P 1) s2'''
+
+    s1'''' = onReceive (fromJust m21') s1'''
+    s2'''' = onReceive (fromJust m12') s2'''
+
 --------------------------
 return []
 runTests :: IO Bool
