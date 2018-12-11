@@ -5,8 +5,7 @@ module SingleReplica (runTests) where
 import           CRDT.CRDT
 
 import           Impl.KVStore.Pid
-import           Impl.KVStore.ReplicatedKVStore (KVStoreOps (..),
-                                                 ReplicatedKVStore (..))
+import           Impl.KVStore.ReplicatedKVStore (KVStoreOps (..), ReplicatedKVStore (..))
 
 import           Algebra.Lattice                (bottom)
 
@@ -18,12 +17,11 @@ import           Test.QuickCheck
 
 -- initialize with arbitrary Pid
 --   * check replica's pid
---   * check than an arbitrary query fails
+--   * check that an arbitrary query fails
 prop_initialize :: Word -> Int -> Bool
 prop_initialize n key =
     pid state == P n
-    && clock state == bottom
-    && isNothing(query state key)
+    && isNothing (query state key)
   where
     state :: AggregateState (ReplicatedKVStore Int String)
     state = initialize (P n)
@@ -37,7 +35,6 @@ prop_singleInsert key key' value =
     (key /= key') ==>
         query state' key == Just value
         && isNothing (query state' key') -- lookup of a different key
-        && bottom < clock state'
   where
     state :: AggregateState (ReplicatedKVStore Int String)
     state  = initialize (P 1)
