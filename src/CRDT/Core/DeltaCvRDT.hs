@@ -4,8 +4,7 @@ module CRDT.Core.DeltaCvRDT where
 
 import           CRDT.Core.CvRDT
 
-import           Algebra.Lattice (BoundedJoinSemiLattice,
-                                  MeetSemiLattice)
+import           Algebra.Lattice (JoinSemiLattice, MeetSemiLattice)
 
 -- A delta-interval-based, convergent replicated data types capable of
 -- disseminating delta states (instead of complete clones) in order to
@@ -22,7 +21,7 @@ import           Algebra.Lattice (BoundedJoinSemiLattice,
 -- which allows shipping this δ rather than the entire resulting state X′.
 class ( CvRDT s
       , Ord (VectorClock s) -- reflects causal ordering
-      , BoundedJoinSemiLattice (VectorClock s)
+      , JoinSemiLattice (VectorClock s)
       , MeetSemiLattice (VectorClock s)
       ) =>
       DeltaCvRDT s
@@ -43,14 +42,23 @@ class ( CvRDT s
     -- related events occuring across replicas using the
     -- vector-clock--i.e.  clk(i) < clk(j) iff event(i) causally
     -- precedes event(j) regardless of which replica they occurred at.
+    -- As a corollary to this,
+    --   clk(i) is concurrent to clk(j) iff
+    --   clock(i) `compare` clock clk(j) == EQ.
+    -- (==), on the other hand, needs to be implemented as value
+    -- (representational) equality.
     --
     -- Note: vectorClocks should *not* wrap around.
+    -- Note: the state of the vectorClock right after initialization
+    --       should be concurrent to any vectorClock from another
+    --       replica.
     type VectorClock s :: *
 
     -- fetch current clock from a given state
     clock :: s -> VectorClock s
 
-    -- increment the replica-specific component of the state's vector-clock
+    -- increment the replica-specific component of the state's
+    -- vector-clock
     incrementClock :: s -> s
 
     -- A delta-mutator mδ is a function, corresponding  to  an  update

@@ -28,8 +28,12 @@ type AckMap s = Map (ReplicaId s) (VectorClock s)
 
 data AggregateState s where
     AggregateState ::
-        (DeltaCvRDT s, Show(ReplicaId s), Show s, Show (VectorClock s)) =>
-        { getS :: s
+        ( DeltaCvRDT s
+        , Show(ReplicaId s)
+        , Show s
+        , Show (VectorClock s)
+        ) =>
+        { getS      :: s
         , getDeltas :: DeltaInterval s
         , getAckMap :: Map (ReplicaId s) (VectorClock s)
         } -> AggregateState s

@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE InstanceSigs         #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-module Impl.KVStore.VectorClock (VectorClock, increment) where
+module Impl.KVStore.Clock (Clock, singleton, increment) where
 
 import           Impl.KVStore.Pid
 
@@ -12,25 +12,21 @@ import           Algebra.Lattice  (BoundedJoinSemiLattice (..),
 import qualified Data.VectorClock as VC (Relation (..),
                                          VectorClock (..), combine,
                                          empty, incWithDefault, max,
-                                         relation)
+                                         relation, singleton)
 
 import           Data.Word        (Word64)
 
 type EventCounter = Word64
-type VectorClock  = VC.VectorClock Pid EventCounter
+type Clock  = VC.VectorClock Pid EventCounter
 
-instance JoinSemiLattice VectorClock where
-    (\/) :: VectorClock -> VectorClock -> VectorClock
+instance JoinSemiLattice Clock where
+    (\/) :: Clock -> Clock -> Clock
     (\/) = VC.max
 
-instance BoundedJoinSemiLattice VectorClock where
-    bottom :: VectorClock
-    bottom = VC.empty
-
-instance MeetSemiLattice VectorClock where
-    -- The minimum of the two vector clocks; discarding any entries which
-    -- aren't present in both clocks
-    (/\) :: VectorClock -> VectorClock -> VectorClock
+instance MeetSemiLattice Clock where
+    -- The minimum of the two vector clocks; discarding any entries
+    -- which aren't present in both clocks
+    (/\) :: Clock -> Clock -> Clock
     c1 /\ c2 = VC.combine minEntry c1 c2
       where
         minEntry _ Nothing Nothing   = Nothing
@@ -38,15 +34,18 @@ instance MeetSemiLattice VectorClock where
         minEntry _ Nothing _         = Nothing
         minEntry _ (Just x) (Just y) = Just (Prelude.min x y)
 
-instance Ord VectorClock where
-    c1 `compare` c2 =
-        if c1 == c2
-            then EQ
-            else case (c1 `VC.relation` c2) of
-                     VC.Causes     -> LT
-                     VC.CausedBy   -> GT
-                     VC.Concurrent -> EQ
+instance Ord Clock where
+    c1 `compare` c2
+        | c1 == c2 = EQ
+        | otherwise =
+            case (c1 `VC.relation` c2) of
+                VC.Causes     -> LT
+                VC.CausedBy   -> GT
+                VC.Concurrent -> EQ
+
+singleton :: Pid -> Clock
+singleton ownId = VC.singleton ownId 1
 
 -- increment a process-specific component of a vector clock.
-increment :: Pid -> VectorClock -> VectorClock
+increment :: Pid -> Clock -> Clock
 increment ownId c = VC.incWithDefault ownId c 0

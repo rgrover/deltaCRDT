@@ -4,26 +4,23 @@
 {-# LANGUAGE TypeFamilies        #-}
 module Impl.KVStore.ReplicatedKVStore where
 
-import           CRDT.Core.CvRDT          (CvRDT (..))
-import           CRDT.Core.DeltaCvRDT     (DeltaCvRDT (..))
+import           CRDT.Core.CvRDT      (CvRDT (..))
+import           CRDT.Core.DeltaCvRDT (DeltaCvRDT (..))
 
+import           Impl.KVStore.Clock   as Clock
 import           Impl.KVStore.Pid
-import           Impl.KVStore.VectorClock as VectorClock
 
-import           Algebra.Lattice          (BoundedJoinSemiLattice (..),
-                                           JoinSemiLattice (..))
+import           Algebra.Lattice      (JoinSemiLattice (..),
+                                       MeetSemiLattice (..))
 
-import           Data.Map                 as Map (Map (..), empty,
-                                                  fromList,
-                                                  insertWith, lookup,
-                                                  unionWith)
+import           Data.Map             as Map (Map (..), empty,
+                                              fromList, insertWith,
+                                              lookup, unionWith)
 
-import           Data.Coerce              (coerce)
-import           Data.List                (minimumBy, sort, sortBy)
-import           Data.Ord                 (Down (..), comparing)
+import           Data.Coerce          (coerce)
+import           Data.List            (minimumBy, sort, sortBy)
+import           Data.Ord             (Down (..), comparing)
 
-
-type Clock    = VectorClock.VectorClock
 type PValue v = (Pid, Clock, v)--P-set{key} is a collection of this value-type
 type NValue   = Clock          --N-set{key} is a collection of this value-type
 
@@ -62,7 +59,7 @@ instance Ord k => CvRDT (ReplicatedKVStore k v) where
 
     initialize :: Pid -> ReplicatedKVStore k v
     initialize pid =
-        Store { getClock = bottom
+        Store { getClock = singleton pid -- init. with eventCounter 1
               , getOwnId = pid
               , getPSet  = Map.empty
               , getNSet  = Map.empty
@@ -134,7 +131,7 @@ instance Ord k => DeltaCvRDT (ReplicatedKVStore k v) where
       where
         ownId = pid store
         c     = clock store
-        c'    = VectorClock.increment ownId c
+        c'    = Clock.increment ownId c
 
     deltaMutation ::
            KVStoreOps

@@ -16,3 +16,4 @@ data Message s
     | Deltas (ReplicaId s)     -- sender's id
              (VectorClock s)   -- sender's clock
              (DeltaInterval s) -- deltas
+    | State s -- state
