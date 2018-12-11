@@ -6,6 +6,11 @@ import           CRDT.Core.CvRDT
 
 import           Algebra.Lattice (JoinSemiLattice, MeetSemiLattice)
 
+-- This implementation derives from:
+-- Efficient State-based CRDTs by Delta-Mutation
+--   - by Paulo S ́ergio Almeida, Ali Shoker, and Carlos Baquero
+-- https://arxiv.org/pdf/1410.2803.pdf
+
 -- A delta-interval-based, convergent replicated data types capable of
 -- disseminating delta states (instead of complete clones) in order to
 -- achieve eventual consistency.

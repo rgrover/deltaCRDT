@@ -93,8 +93,7 @@ onReceive (Ack senderId receivedRemoteClock) aggregateState =
     aMap  = getAckMap aggregateState
     aMap' = insertWith (\/) senderId receivedRemoteClock aMap
 
--- To be called upon receiving a delta-interval from a neighbour
--- input : message ~ ( Deltas senderId deltas)
+-- To be called upon receiving a delta-interval from a neighbour.
 --
 -- pseudocode:
 --
@@ -103,7 +102,7 @@ onReceive (Ack senderId receivedRemoteClock) aggregateState =
 --     X′i = Xi ⊔ d        // incorporate deltas
 --     c′i = ci + 1        // increment clock
 --     D′i = Di { ci → d } // merge new deltas with local delta-group
---     sendTo senderId ( ACK finalClock )
+--     (optionally) sendTo senderId ( ACK finalClock )
 onReceive (Deltas senderId sendersClock deltas) aggregateState =
     if (sendersClock < ownClock) || (Seq.null deltas)
         then aggregateState -- nothing to do
@@ -128,19 +127,37 @@ onReceive (Deltas senderId sendersClock deltas) aggregateState =
     mergeDelta :: DeltaCvRDT s => s -> Int -> s -> s
     mergeDelta s1 _ s2 = s1 \/ s2
 
+-- To be called upon receiving a state-dump from a neighbour
+-- Input: Xr as the remote state
+--
+-- pseudocode:
+--     c′i = ci + 1        // increment clock
+--     X′i = Xi ⊔ Xr       // incorporate deltas
+--     D′i = Di { ci → Xr } // merge new deltas with local delta-group
+--     (optionally) sendTo senderId ( ACK finalClock )
 onReceive (State rx) aggregateState =
     if rClock < ownClock
         then aggregateState -- received state contains old information
         else aggregateState
              { getS      = mergedState
+             , getDeltas = deltas'
              , getAckMap = aMap'
              }
   where
     x           = getS aggregateState
     ownClock    = DeltaCvRDT.clock x
     rClock      = DeltaCvRDT.clock rx
+
+    --     X′i = Xi ⊔ Xr       // incorporate deltas
     x'          = incrementClock x
     mergedState = x' \/ rx
+
+    --     D′i = Di { ci → Xr }
+    mergedClock = DeltaCvRDT.clock mergedState
+    rx'         = DeltaCvRDT.updateClock mergedClock rx
+    deltas      = getDeltas aggregateState
+    deltas'     = deltas |> rx'
+
     remoteId    = CvRDT.pid rx
     aMap        = getAckMap aggregateState
     aMap'       = insertWith (\/) remoteId rClock aMap

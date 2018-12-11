@@ -18,7 +18,8 @@ import           Data.Map             as Map (Map (..), empty,
                                               lookup, unionWith)
 
 import           Data.Coerce          (coerce)
-import           Data.List            (minimumBy, sort, sortBy)
+import           Data.List            (minimumBy, nub, nubBy, sort,
+                                       sortBy)
 import           Data.Ord             (Down (..), comparing)
 
 type PValue v = (Pid, Clock, v)--P-set{key} is a collection of this value-type
@@ -178,7 +179,8 @@ bestPSubset xs = equiv
             sortedXs'
 
 mergePSets :: PValueSet v -> PValueSet v -> PValueSet v
-mergePSets = (\a b -> bestPSubset (a ++ b))
+mergePSets = (\a b -> bestPSubset $ nubBy equal (a ++ b))
+    where equal (p1, c1, _) (p2, c2, _) = (p1 == p2) && (c1 == c2)
 
 bestNSubset :: NValueSet -> NValueSet
 bestNSubset xs = equiv
@@ -195,4 +197,4 @@ bestNSubset xs = equiv
             sortedXs'
 
 mergeNSets :: NValueSet -> NValueSet -> NValueSet
-mergeNSets = (\a b -> bestNSubset (a ++ b))
+mergeNSets = (\a b -> bestNSubset $ nub (a ++ b))

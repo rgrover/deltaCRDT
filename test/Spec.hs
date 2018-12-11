@@ -1,5 +1,6 @@
 import           Test.QuickCheck
 
+import qualified SimulatedConcurrency
 import qualified SingleReplica
 import qualified TwoReplicas
 
