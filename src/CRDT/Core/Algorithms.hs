@@ -14,10 +14,13 @@ import           Data.Map.Strict          as Map (Map, empty,
                                                   findWithDefault,
                                                   insertWith, lookup,
                                                   toList)
-import           Data.Sequence            as Seq (Seq, dropWhileL,
-                                                  empty,
+import           Data.Sequence            as Seq (Seq, ViewL ((:<)),
+                                                  dropWhileL, empty,
                                                   foldlWithIndex,
-                                                  null, (><), (|>))
+                                                  null, viewl, (><),
+                                                  (|>))
+
+import           Data.Maybe               (fromJust, isNothing)
 
 -- Initialize δCvRDT
 initialize ::
@@ -101,7 +104,6 @@ onReceive (Ack senderId receivedRemoteClock) aggregateState =
 --     c′i = ci + 1        // increment clock
 --     D′i = Di { ci → d } // merge new deltas with local delta-group
 --     sendTo senderId ( ACK finalClock )
---
 onReceive (Deltas senderId sendersClock deltas) aggregateState =
     if (sendersClock < ownClock) || (Seq.null deltas)
         then aggregateState -- nothing to do
@@ -178,7 +180,7 @@ composeAckMessage aggregateState = Ack ownId c
 --   if ci < Ai(j)
 --       then return (Deltas {})
 --       else
---           if receiver is unknown ∨ min(domain(Di)) > Ai(j) then
+--           if receiver is unknown ∨ Di = {} ∨ (min-clock(Di) ≮ Ai(j)) then
 --               d = Xi
 --           else
 --               d = ⊔ { Di(l) | Ai(j) ≤ l }
@@ -190,13 +192,12 @@ composeMessageTo ::
     -> AggregateState s
     -> Maybe (Message s)
 composeMessageTo receiver aggregateState =
-    case knownRemoteClock of
-        Nothing          -> Just $ State x -- send all state
-        Just remoteClock ->
-            let relevantDeltas = deltas `unknownTo` remoteClock
-            in if Seq.null relevantDeltas
-                then Nothing
-                else Just (Deltas ownId ownClock relevantDeltas)
+    if Seq.null deltas ||
+       isNothing knownRemoteClock ||
+       not (DeltaCvRDT.clock minDelta < remoteClock)
+        then Just $ State x -- send all state
+        else let relevantDeltas = deltas `unknownTo` remoteClock
+             in Just (Deltas ownId ownClock relevantDeltas)
   where
     x                = getS aggregateState
     ownId            = CvRDT.pid x
@@ -204,6 +205,8 @@ composeMessageTo receiver aggregateState =
     deltas           = getDeltas aggregateState
     ackMap           = getAckMap aggregateState
     knownRemoteClock = Map.lookup receiver ackMap
+    remoteClock      = fromJust knownRemoteClock
+    minDelta :< _    = viewl deltas
 
 -- The user of this library should call this method periodically to
 -- garbage collect local deltas by throwing away entries which have
