@@ -43,7 +43,7 @@ instance Ord k => JoinSemiLattice (ReplicatedKVStore k v) where
     s1 \/ s2 =
         Store
         { getClock = getClock s1 \/ getClock s2
-        , getOwnId = getOwnId s1 -- we assume that s2 is a delta mutation
+        , getOwnId = getOwnId s1 -- we assume s2 is the remote state
         , getPSet  = unionWith mergePSets (getPSet s1) (getPSet s2)
         , getNSet  = unionWith mergeNSets (getNSet s1) (getNSet s2)
         }

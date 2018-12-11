@@ -111,12 +111,12 @@ onReceive (Deltas senderId sendersClock deltas) aggregateState =
              , getAckMap = insertWith (\/) senderId sendersClock aMap
              }
   where
-    x               = getS aggregateState
-    ownPid          = CvRDT.pid x
-    ownClock        = DeltaCvRDT.clock x
-    x'              = incrementClock x
-    ownDeltas       = getDeltas aggregateState
-    aMap            = getAckMap aggregateState
+    x         = getS aggregateState
+    ownPid    = CvRDT.pid x
+    ownClock  = DeltaCvRDT.clock x
+    x'        = incrementClock x
+    ownDeltas = getDeltas aggregateState
+    aMap      = getAckMap aggregateState
 
     usefulDeltas = deltas `unknownTo` ownClock
     ownDeltas'   = ownDeltas >< usefulDeltas
@@ -125,14 +125,29 @@ onReceive (Deltas senderId sendersClock deltas) aggregateState =
     mergeDelta :: DeltaCvRDT s => s -> Int -> s -> s
     mergeDelta s1 _ s2 = s1 \/ s2
 
-onReceive (State s) aggregateState = undefined -- TODO
+onReceive (State rx) aggregateState =
+    if rClock < ownClock
+        then aggregateState -- received state contains old information
+        else aggregateState
+             { getS      = mergedState
+             , getAckMap = aMap'
+             }
+  where
+    x           = getS aggregateState
+    ownClock    = DeltaCvRDT.clock x
+    rClock      = DeltaCvRDT.clock rx
+    x'          = incrementClock x
+    mergedState = x' \/ rx
+    remoteId    = CvRDT.pid rx
+    aMap        = getAckMap aggregateState
+    aMap'       = insertWith (\/) remoteId rClock aMap
 
 -- Prepare an Ack message to be sent to a neighbour. The user
 -- of this library is expected to send ACK messages periodically in a
 -- manner which ensures eventual consistency--for instance, by sending
 -- a message to all, a subset, or a randomly selected neighbour.
 composeAckMessageTo ::
-       DeltaCvRDT s
+       (DeltaCvRDT s, Show s, Show (VectorClock s))
     => AggregateState s
     -> Message s
 composeAckMessageTo aggregateState = Ack ownId c
