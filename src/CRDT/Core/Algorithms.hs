@@ -185,7 +185,7 @@ composeAckMessageTo aggregateState = Ack ownId c
 --
 --           return (Deltas, d, ci)
 composeDeltasMessageTo ::
-       DeltaCvRDT s
+       (DeltaCvRDT s, Show s, Show (VectorClock s))
     => ReplicaId s
     -> AggregateState s
     -> Maybe (Message s)
@@ -193,11 +193,10 @@ composeDeltasMessageTo receiver aggregateState =
     case knownRemoteClock of
         Nothing          -> Just $ State x -- send all state
         Just remoteClock ->
-            if ownClock < remoteClock
+            let relevantDeltas = deltas `unknownTo` remoteClock
+            in if Seq.null relevantDeltas
                 then Nothing
-                else let relevantDeltas =
-                             deltas `unknownTo` remoteClock
-                     in Just (Deltas ownId ownClock relevantDeltas)
+                else Just (Deltas ownId ownClock relevantDeltas)
   where
     x                = getS aggregateState
     ownId            = CvRDT.pid x
