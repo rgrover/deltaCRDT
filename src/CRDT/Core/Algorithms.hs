@@ -184,12 +184,12 @@ composeAckMessage aggregateState = Ack ownId c
 --               d = ⊔ { Di(l) | Ai(j) ≤ l }
 --
 --           return (Deltas, d, ci)
-composeDeltasMessageTo ::
+composeMessageTo ::
        (DeltaCvRDT s, Show s, Show (VectorClock s))
     => ReplicaId s
     -> AggregateState s
     -> Maybe (Message s)
-composeDeltasMessageTo receiver aggregateState =
+composeMessageTo receiver aggregateState =
     case knownRemoteClock of
         Nothing          -> Just $ State x -- send all state
         Just remoteClock ->

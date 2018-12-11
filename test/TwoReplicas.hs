@@ -110,7 +110,7 @@ prop_singleInsertFollowedByMessageExchangeGivesConsistency key value =
     c2  = clock s2
     s1' = modify Add key value s1
     c1' = clock s1'
-    m12 = composeDeltasMessageTo (P 2) s1'
+    m12 = composeMessageTo (P 2) s1'
 
     msgIsFullState =
         case m12 of
@@ -123,10 +123,10 @@ prop_singleInsertFollowedByMessageExchangeGivesConsistency key value =
     s2' = onReceive (fromJust m12) s2
     c2' = clock s2'
 
-    m21 = composeDeltasMessageTo (P 1) s2'
+    m21 = composeMessageTo (P 1) s2'
 
 -- insert an arbitrary k-v pair into each replica, and then
--- send a messages between the two replicas
+-- send messages between the two replicas
 --   * both messages should be non-empty
 --   * lookup of either key in either replica should succeed
 --   * clock of the second replica should be > its initial clock
@@ -150,17 +150,132 @@ prop_concurrentInsertsFollowedByMessageExchangesGiveConsistency k1 v1 k2 v2 =
     s2 :: AggregateState (ReplicatedKVStore Int String)
     s2  = initialize (P 2)
     s1' = modify Add k1 v1 s1
-    c1' = clock s1'
     s2' = modify Add k2 v2 s2
-    c2' = clock s2'
 
-    m12  = composeDeltasMessageTo (P 2) s1'
+    m12  = composeMessageTo (P 2) s1'
     s2'' = onReceive (fromJust m12) s2'
 
-    m21  = composeDeltasMessageTo (P 1) s2''
+    m21  = composeMessageTo (P 1) s2''
     s1'' = onReceive (fromJust m21) s1'
 
-    m12' = composeDeltasMessageTo (P 2) s1''
+    m12' = composeMessageTo (P 2) s1''
+
+-- insert an arbitrary k-v pair into each replica, and then
+-- send messages between the two replicas. First deltas are exchanged
+-- concurrently, and then Acks.
+--   * both delta messages should be non-empty
+--   * following the first exchange of deltas, the clocks of the two
+--     replicas should still be concurrent
+--   * lookup of either key in either replica should succeed after
+--     first exchange of deltas
+--   * following exchange of acks:
+--      * any further attempts to send deltas should result in
+--        empty messages.
+--      * the keys should still be persistent
+prop_concurrentInsertsFollowedByConcurrentMessageExchanges ::
+       Int -> String -> Int -> String -> Property
+prop_concurrentInsertsFollowedByConcurrentMessageExchanges k1 v1 k2 v2 =
+    k1 /= k2 ==>
+        clock s1'' `compare` clock s2'' == EQ
+        && (query s1'' k1) == Just v1
+        && (query s1'' k2) == Just v2
+        && (query s2'' k1) == Just v1
+        && (query s2'' k2) == Just v2
+        && clock s1''' `compare` clock s2''' == EQ
+        && (query s1''' k1) == Just v1
+        && (query s1''' k2) == Just v2
+        && (query s2''' k1) == Just v1
+        && (query s2''' k2) == Just v2
+        && isNothing (m12')
+        && isNothing (m21')
+  where
+    s1 :: AggregateState (ReplicatedKVStore Int String)
+    s1 = initialize (P 1)
+    s2 :: AggregateState (ReplicatedKVStore Int String)
+    s2  = initialize (P 2)
+    s1' = modify Add k1 v1 s1
+    s2' = modify Add k2 v2 s2
+
+    m12  = composeMessageTo (P 2) s1'
+    m21  = composeMessageTo (P 1) s2'
+
+    s1'' = onReceive (fromJust m21) s1'
+    s2'' = onReceive (fromJust m12) s2'
+
+    ack12 = composeAckMessage s1''
+    ack21 = composeAckMessage s2''
+
+    s1''' = onReceive ack21 s1''
+    s2''' = onReceive ack12 s2''
+
+    m12' = composeMessageTo (P 2) s1'''
+    m21' = composeMessageTo (P 1) s2'''
+
+-- concurrent inserts of conflicting values get resolved
+-- uniformly across both replicas.
+--
+--  Take a key and inserttwo distinct values for it concurrently,
+--  exchange delta messages, and ensure that the value is seen
+--  consistently across the replicas.
+prop_concurrentConflictingInsertsGetResolvedUniformly ::
+       Int -> String -> String -> Property
+prop_concurrentConflictingInsertsGetResolvedUniformly key v1 v2 =
+    v1 /= v2 ==>
+        (query s1'' key) == (query s1'' key)
+        && not (isNothing (query s1'' key))
+  where
+    s1 :: AggregateState (ReplicatedKVStore Int String)
+    s1 = initialize (P 1)
+    s2 :: AggregateState (ReplicatedKVStore Int String)
+    s2  = initialize (P 2)
+    s1' = modify Add key v1 s1
+    s2' = modify Add key v2 s2
+
+    m12  = composeMessageTo (P 2) s1'
+    m21  = composeMessageTo (P 1) s2'
+
+    s1'' = onReceive (fromJust m21) s1'
+    s2'' = onReceive (fromJust m12) s2'
+
+-- Insert and then remove a single key-value pair on a single
+-- replica. Exchange deltas. Then ensure that the key is absent in the
+-- other replica.
+prop_insertFollowedByRemoveOnOneReplicaIsPersistent ::
+    Int -> String -> Bool
+prop_insertFollowedByRemoveOnOneReplicaIsPersistent key value =
+    isNothing (query s2' key)
+  where
+    s1 :: AggregateState (ReplicatedKVStore Int String)
+    s1 = initialize (P 1)
+    s2 :: AggregateState (ReplicatedKVStore Int String)
+    s2   = initialize (P 2)
+    s1'  = modify Add key value s1
+    s1'' = modify Remove key value s1'
+
+    m12 = composeMessageTo (P 2) s1''
+    s2' = onReceive (fromJust m12) s2
+
+-- Insert a key-value pair on one replica. Concurrently remove the key
+-- from another replica. Exchange deltas. Insert should persist across
+-- both replicas.
+prop_concurrentInsertAndRemoveResultsInInsertBeingRetained ::
+    Int -> String -> Bool
+prop_concurrentInsertAndRemoveResultsInInsertBeingRetained key value =
+    query s1'' key == Just value
+    && query s2'' key == Just value
+  where
+    s1 :: AggregateState (ReplicatedKVStore Int String)
+    s1 = initialize (P 1)
+    s2 :: AggregateState (ReplicatedKVStore Int String)
+    s2  = initialize (P 2)
+    s1' = modify Add key value s1
+    s2' = modify Remove key value s2
+
+    m12 = composeMessageTo (P 2) s1'
+    m21 = composeMessageTo (P 1) s2'
+
+    s1'' = onReceive (fromJust m21) s1'
+    s2'' = onReceive (fromJust m12) s2'
 
 --------------------------
 return []
