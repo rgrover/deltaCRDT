@@ -147,11 +147,11 @@ onReceive (State rx) aggregateState =
 -- of this library is expected to send ACK messages periodically in a
 -- manner which ensures eventual consistency--for instance, by sending
 -- a message to all, a subset, or a randomly selected neighbour.
-composeAckMessageTo ::
+composeAckMessage ::
        (DeltaCvRDT s, Show s, Show (VectorClock s))
     => AggregateState s
     -> Message s
-composeAckMessageTo aggregateState = Ack ownId c
+composeAckMessage aggregateState = Ack ownId c
     where x     = getS aggregateState
           ownId = CvRDT.pid x
           c     = DeltaCvRDT.clock x
