@@ -16,11 +16,14 @@ import           Data.Map.Strict          as Map (Map, empty,
                                                   toList)
 import           Data.Sequence            as Seq (Seq, ViewL ((:<)),
                                                   dropWhileL, empty,
+                                                  filter,
                                                   foldlWithIndex,
                                                   null, viewl, (><),
                                                   (|>))
 
 import           Data.Maybe               (fromJust, isNothing)
+
+import           Debug.Trace              (trace)
 
 -- Initialize δCvRDT
 initialize ::
@@ -131,9 +134,9 @@ onReceive (Deltas senderId sendersClock deltas) aggregateState =
 -- Input: Xr as the remote state
 --
 -- pseudocode:
+--     D′i = Di { ci → Xr } // merge new deltas with local delta-group
 --     c′i = ci + 1        // increment clock
 --     X′i = Xi ⊔ Xr       // incorporate deltas
---     D′i = Di { ci → Xr } // merge new deltas with local delta-group
 --     (optionally) sendTo senderId ( ACK finalClock )
 onReceive (State rx) aggregateState =
     if rClock < ownClock
@@ -144,6 +147,10 @@ onReceive (State rx) aggregateState =
              , getAckMap = aMap'
              }
   where
+    --     D′i = Di { ci → Xr }
+    deltas      = getDeltas aggregateState
+    deltas'     = deltas |> rx
+
     x           = getS aggregateState
     ownClock    = DeltaCvRDT.clock x
     rClock      = DeltaCvRDT.clock rx
@@ -151,12 +158,6 @@ onReceive (State rx) aggregateState =
     --     X′i = Xi ⊔ Xr       // incorporate deltas
     x'          = incrementClock x
     mergedState = x' \/ rx
-
-    --     D′i = Di { ci → Xr }
-    mergedClock = DeltaCvRDT.clock mergedState
-    rx'         = DeltaCvRDT.updateClock mergedClock rx
-    deltas      = getDeltas aggregateState
-    deltas'     = deltas |> rx'
 
     remoteId    = CvRDT.pid rx
     aMap        = getAckMap aggregateState
@@ -180,11 +181,6 @@ composeAckMessage aggregateState = Ack ownId c
 -- manner which ensures eventual consistency--for instance, by sending
 -- a message to all, a subset, or a randomly selected neighbour.
 --
--- Note: This method generates Nothing if the receiver is known to
--- need nothing from the sender's local state. This can be used as an
--- indication to try another receiver or to throttle down
--- communication.
---
 --   ci :: VectorClock // this is the local clock
 --   Di :: DeltaInterval // i.e. [(clock, delta)]
 --   Xi :: CvRDT-state
@@ -197,7 +193,7 @@ composeAckMessage aggregateState = Ack ownId c
 --   if ci < Ai(j)
 --       then return (Deltas {})
 --       else
---           if receiver is unknown ∨ Di = {} ∨ (min-clock(Di) ≮ Ai(j)) then
+--           if receiver's clock is unknown ∨ Di = {} ∨ (min-clock(Di) ≮ Ai(j)) then
 --               d = Xi
 --           else
 --               d = ⊔ { Di(l) | Ai(j) ≤ l }
@@ -207,14 +203,15 @@ composeMessageTo ::
        (DeltaCvRDT s, Show s, Show (VectorClock s))
     => ReplicaId s
     -> AggregateState s
-    -> Maybe (Message s)
-composeMessageTo receiver aggregateState =
-    if Seq.null deltas ||
-       isNothing knownRemoteClock ||
-       not (DeltaCvRDT.clock minDelta < remoteClock)
-        then Just $ State x -- send all state
-        else let relevantDeltas = deltas `unknownTo` remoteClock
-             in Just (Deltas ownId ownClock relevantDeltas)
+    -> Message s
+composeMessageTo receiver aggregateState
+    | isNothing knownRemoteClock || Seq.null deltas =
+        State x -- send all state
+    | not (DeltaCvRDT.clock minDelta < remoteClock) =
+        State x -- send all state
+    | otherwise =
+        let relevantDeltas = deltas `unknownTo` remoteClock
+        in Deltas ownId ownClock relevantDeltas
   where
     x                = getS aggregateState
     ownId            = CvRDT.pid x
@@ -252,4 +249,5 @@ unknownTo ::
     => DeltaInterval s
     -> VectorClock s
     -> DeltaInterval s
-unknownTo ds c = dropWhileL ((< c) . DeltaCvRDT.clock) ds
+unknownTo ds c = Seq.filter (relevant . DeltaCvRDT.clock) ds
+  where relevant d = not (d == c || d < c)

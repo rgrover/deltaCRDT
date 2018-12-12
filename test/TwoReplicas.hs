@@ -13,7 +13,7 @@ import           Algebra.Lattice                (bottom, (\/))
 import           Data.List                      (foldl', nubBy,
                                                  zipWith)
 import qualified Data.Map                       as Map
-import           Data.Maybe                     (fromJust, isNothing)
+import           Data.Maybe                     (isNothing)
 
 import           Debug.Trace                    (trace)
 import           Test.QuickCheck
@@ -89,19 +89,18 @@ prop_separateInsertsFollowedByRemoves k1 v1 k2 v2 =
 --   * clock of the second replica should be > the clock of the first
 --   * lookup of the key in the first replica should still succeed
 --
---   * replica2 composes an empty message for replica1 after the exchange
+--   * replica2 also composes a message for replica1 after the exchange
 prop_singleInsertFollowedByMessageExchangeGivesConsistency ::
        Int -> String -> Bool
 prop_singleInsertFollowedByMessageExchangeGivesConsistency key value =
-    c1' `compare` c2 == EQ
-    && not (isNothing m12)
-    && msgIsFullState
-    && (query s2' key) == Just value
-    && c1' < c2'
-    && c2 < c2'
-    && c1' \/ c2 < c2'
-    && pid s2' == P 2
-    && isNothing m21
+     c1' `compare` c2 == EQ
+     && msgIsFullState m12
+     && (query s2' key) == Just value
+     && c1' < c2'
+     && c2 < c2'
+     && c1' \/ c2 < c2'
+     && pid s2' == P 2
+     && msgIsFullState m21
   where
     s1 :: AggregateState (ReplicatedKVStore Int String)
     s1 = initialize (P 1)
@@ -112,15 +111,12 @@ prop_singleInsertFollowedByMessageExchangeGivesConsistency key value =
     c1' = clock s1'
     m12 = composeMessageTo (P 2) s1'
 
-    msgIsFullState =
-        case m12 of
-            Nothing -> False
-            Just msg ->
-                case msg of
-                    State _   -> True
-                    otherwise -> False
+    msgIsFullState msg =
+        case msg of
+            State _   -> True
+            otherwise -> False
 
-    s2' = onReceive (fromJust m12) s2
+    s2' = onReceive m12 s2
     c2' = clock s2'
 
     m21 = composeMessageTo (P 1) s2'
@@ -131,19 +127,17 @@ prop_singleInsertFollowedByMessageExchangeGivesConsistency key value =
 --   * lookup of either key in either replica should succeed
 --   * clock of the second replica should be > its initial clock
 --   * clock of the second replica should be > the clock of the first
---   * replica1 composes an empty message for replica2 after the exchange
 prop_concurrentInsertsFollowedByMessageExchangesGiveConsistency ::
        Int -> String -> Int -> String -> Property
 prop_concurrentInsertsFollowedByMessageExchangesGiveConsistency k1 v1 k2 v2 =
     k1 /= k2 ==>
         (query s2'' k1) == Just v1
-        && (query s1'' k1) == Just v1
-        && (query s1'' k2) == Just v2
-        && (query s2'' k2) == Just v2
-        && clock s1' < clock s1''
-        && clock s2'' < clock s1''
-        && pid s1'' == P 1
-        && isNothing (m12')
+         && (query s1'' k1) == Just v1
+         && (query s1'' k2) == Just v2
+         && (query s2'' k2) == Just v2
+         && clock s1' < clock s1''
+         && clock s2'' < clock s1''
+         && pid s1'' == P 1
   where
     s1 :: AggregateState (ReplicatedKVStore Int String)
     s1 = initialize (P 1)
@@ -153,17 +147,15 @@ prop_concurrentInsertsFollowedByMessageExchangesGiveConsistency k1 v1 k2 v2 =
     s2' = modify Add k2 v2 s2
 
     m12  = composeMessageTo (P 2) s1'
-    s2'' = onReceive (fromJust m12) s2'
+    s2'' = onReceive m12 s2'
 
     m21  = composeMessageTo (P 1) s2''
-    s1'' = onReceive (fromJust m21) s1'
-
-    m12' = composeMessageTo (P 2) s1''
+    s1'' = onReceive m21 s1'
 
 -- insert an arbitrary k-v pair into each replica, and then
 -- send messages between the two replicas. First deltas are exchanged
 -- concurrently, and then Acks.
---   * both delta messages should be non-empty
+--   * all delta messages should be non-empty
 --   * following the first exchange of deltas, the clocks of the two
 --     replicas should still be concurrent
 --   * lookup of either key in either replica should succeed after
@@ -186,8 +178,6 @@ prop_concurrentInsertsFollowedByConcurrentMessageExchanges k1 v1 k2 v2 =
         && (query s1''' k2) == Just v2
         && (query s2''' k1) == Just v1
         && (query s2''' k2) == Just v2
-        && isNothing (m12')
-        && isNothing (m21')
   where
     s1 :: AggregateState (ReplicatedKVStore Int String)
     s1 = initialize (P 1)
@@ -199,8 +189,8 @@ prop_concurrentInsertsFollowedByConcurrentMessageExchanges k1 v1 k2 v2 =
     m12  = composeMessageTo (P 2) s1'
     m21  = composeMessageTo (P 1) s2'
 
-    s1'' = onReceive (fromJust m21) s1'
-    s2'' = onReceive (fromJust m12) s2'
+    s1'' = onReceive m21 s1'
+    s2'' = onReceive m12 s2'
 
     ack12 = composeAckMessage s1''
     ack21 = composeAckMessage s2''
@@ -234,8 +224,8 @@ prop_concurrentConflictingInsertsGetResolvedUniformly key v1 v2 =
     m12  = composeMessageTo (P 2) s1'
     m21  = composeMessageTo (P 1) s2'
 
-    s1'' = onReceive (fromJust m21) s1'
-    s2'' = onReceive (fromJust m12) s2'
+    s1'' = onReceive m21 s1'
+    s2'' = onReceive m12 s2'
 
 -- Insert and then remove a single key-value pair on a single
 -- replica. Exchange deltas. Then ensure that the key is absent in the
@@ -253,7 +243,7 @@ prop_insertFollowedByRemoveOnOneReplicaIsPersistent key value =
     s1'' = modify Remove key value s1'
 
     m12 = composeMessageTo (P 2) s1''
-    s2' = onReceive (fromJust m12) s2
+    s2' = onReceive m12 s2
 
 -- Insert a key-value pair on one replica. Concurrently remove the key
 -- from another replica. Exchange deltas. Insert should persist across
@@ -274,8 +264,8 @@ prop_concurrentInsertAndRemoveResultsInInsertBeingRetained key value =
     m12 = composeMessageTo (P 2) s1'
     m21 = composeMessageTo (P 1) s2'
 
-    s1'' = onReceive (fromJust m21) s1'
-    s2'' = onReceive (fromJust m12) s2'
+    s1'' = onReceive m21 s1'
+    s2'' = onReceive m12 s2'
 
 -- multiple concurrent inserts for the same key, followed by message
 -- exchange to achieve consistency, followed by remove on one
@@ -298,13 +288,13 @@ prop_concurrentInsertsFollowedBySingleRemove key v1 v2 =
     m12 = composeMessageTo (P 2) s1'
     m21 = composeMessageTo (P 1) s2'
 
-    s1'' = onReceive (fromJust m21) s1'
-    s2'' = onReceive (fromJust m12) s2'
+    s1'' = onReceive m21 s1'
+    s2'' = onReceive m12 s2'
 
     s1''' = modify Remove key undefined s1''
 
     m12'  = composeMessageTo (P 2) s1'''
-    s2''' = onReceive (fromJust m12') s2''
+    s2''' = onReceive m12' s2''
 
 -- multiple concurrent inserts for the same key, followed by message
 -- exchange to achieve consistency, followed by multiple
@@ -328,8 +318,8 @@ prop_concurrentInsertsFollowedByConcurrentRemoves key v1 v2 =
     m12 = composeMessageTo (P 2) s1'
     m21 = composeMessageTo (P 1) s2'
 
-    s1'' = onReceive (fromJust m21) s1'
-    s2'' = onReceive (fromJust m12) s2'
+    s1'' = onReceive m21 s1'
+    s2'' = onReceive m12 s2'
 
     s1''' = modify Remove key undefined s1''
     s2''' = modify Remove key undefined s2''
@@ -337,8 +327,8 @@ prop_concurrentInsertsFollowedByConcurrentRemoves key v1 v2 =
     m12'  = composeMessageTo (P 2) s1'''
     m21'  = composeMessageTo (P 1) s2'''
 
-    s1'''' = onReceive (fromJust m21') s1'''
-    s2'''' = onReceive (fromJust m12') s2'''
+    s1'''' = onReceive m21' s1'''
+    s2'''' = onReceive m12' s2'''
 
 --------------------------
 return []
