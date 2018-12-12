@@ -10,6 +10,7 @@ main :: IO ()
 main = do
     good <- and <$> sequence [ SingleReplica.runTests
                              , TwoReplicas.runTests
+                             , SimulatedConcurrency.runTests
                              ]
     if good
         then exitSuccess

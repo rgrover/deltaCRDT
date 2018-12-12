@@ -14,27 +14,21 @@ import qualified Data.Map                       as Map (Map (..),
                                                         fromList,
                                                         insert,
                                                         toList, (!))
-import           Data.Maybe                     (fromJust)
-import           Debug.Trace                    (trace)
 
 import           Test.QuickCheck
 
-numReplicas = 5
+numReplicas = 5 -- change this to your liking.
 
 data Action
-    = Insert
-        Pid    -- target replicaId
-        Int    -- key
-        String -- value
-    | Delete
-        Pid    -- target replicaId
-        Int    -- key
-    | Message
-        Pid    -- sender
-        Pid    -- receiver
-    | Ack
-        Pid    -- sender
-        Pid    -- receiver
+    = Insert Pid -- target replicaId
+             Int -- key
+             String -- value
+    | Delete Pid -- target replicaId
+             Int -- key
+    | Message Pid -- sender
+              Pid -- receiver
+    | Ack Pid -- sender
+          Pid -- receiver
     deriving (Show)
 
 instance Arbitrary Action where
