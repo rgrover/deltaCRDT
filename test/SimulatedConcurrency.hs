@@ -85,13 +85,10 @@ applyAction stateMap action =
             in Map.insert replica s' stateMap
         Message sender receiver ->
             let s1  = stateMap Map.! sender
-                m12 = composeMessageTo receiver s1
                 s2  = stateMap Map.! receiver
-            in case m12 of
-                Nothing      -> stateMap
-                Just message ->
-                    let s2' = onReceive message s2
-                    in Map.insert receiver s2' stateMap
+                m12 = composeMessageTo receiver s1
+                s2' = onReceive m12 s2
+            in Map.insert receiver s2' stateMap
         Ack sender receiver ->
             let s1  = stateMap Map.! sender
                 m12 = composeAckMessage s1
@@ -111,20 +108,6 @@ prop_arbitraryOperationsSimulatingConcurrency =
     forAll (scale (* 1) (arbitrary :: Gen [Action])) $ \actions ->
         not (null actions) ==>
         let
-            {-
-             -actions =
-             -    [ Insert (P 2) 21 "Sunny"
-             -    , Message (P 2) (P 0)
-             -    , Delete (P 4) 26
-             -    , Insert (P 3) 31 ""
-             -    , Message (P 4) (P 0)
-             -    , Message (P 3) (P 0)
-             -    , Insert (P 3) 18 "Freezing"
-             -    , Insert (P 3) 2 "Foggy"
-             -    , Insert (P 2) 24 ""
-             -    , Message (P 3) (P 2)
-             -    ]
-             -}
             pids = P <$> [0 .. (numReplicas - 1)]
 
             -- original states
@@ -138,7 +121,7 @@ prop_arbitraryOperationsSimulatingConcurrency =
             -- deltas at the end.
             syncs :: [Action]
             syncs = [Message s r | s <- pids, r <- pids, s /= r]
-            --syncs = [Message s r | s <- (P <$> [0, 1, 2]), r <- pids, s /= r]
+            --syncs = [Message s r | s <- (P <$> [0..2]), r <- pids, s /= r]
             states'' = foldl' applyAction states' syncs
 
             statesAsList :: [Replica]
@@ -148,7 +131,7 @@ prop_arbitraryOperationsSimulatingConcurrency =
                 and $ zipWith (==) values (tail values)
               where
                 values = (flip query key) <$> statesAsList
-        in trace (show (valuesMatchFor <$> [1..31])) all valuesMatchFor [1 .. 31]
+        in all valuesMatchFor [1 .. 31]
         --in trace (show (statesAsList !! 0)) $ False
 
 --------------------------

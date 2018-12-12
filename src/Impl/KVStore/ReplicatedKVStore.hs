@@ -164,19 +164,25 @@ instance Ord k => DeltaCvRDT (ReplicatedKVStore k v) where
 
 bestPSubset :: PValueSet v -> PValueSet v
 bestPSubset xs = equiv
-    -- coerce clocks as Down to get a reversed comparison function
   where
+    -- coerce clocks as Down to get a reversed comparison function
     toDown               = (\(pid, c, v) -> (pid, Down c, v))
     fromDown             = (\(pid, Down c, v) -> (pid, c, v))
     downXs               = map toDown xs
     sortedXs             = sortBy (comparing (\(_, c, _) -> c)) downXs
     sortedXs'            = map fromDown sortedXs
     (_, firstBestClk, _) = head sortedXs' -- first of the latest clocks
-    -- find the equivalence class of concurrent clocks
-    equiv =
-        takeWhile
-            (\(_, c, _) -> (c `compare` firstBestClk) == EQ)
-            sortedXs'
+
+    -- from the down-sorted list, find the equivalence class of
+    -- concurrent clocks at the head, such that all of them compare
+    -- equally with each other; i.e. stop accumulating the equivalence
+    -- class once a smaller entry is discovered
+    equiv = go [head sortedXs'] $ tail sortedXs'
+      where
+          go accum [] = accum
+          go accum (y@(_, clky, _):ys)
+            | any (\(_, clkx, _) -> clky < clkx) accum = accum -- terminate
+            | otherwise = go (y:accum) ys   -- accumulate
 
 mergePSets :: PValueSet v -> PValueSet v -> PValueSet v
 mergePSets = (\a b -> bestPSubset $ nubBy equal (a ++ b))
@@ -190,11 +196,17 @@ bestNSubset xs = equiv
     sortedXs     = sort downXs
     sortedXs'    = map (\ (Down x) -> x) sortedXs
     firstBestClk = head sortedXs' -- first of the latest clocks
-    -- find the equivalence class of concurrent clocks
-    equiv =
-        takeWhile
-            (\c -> (c `compare` firstBestClk) == EQ)
-            sortedXs'
+
+    -- from the down-sorted list, find the equivalence class of
+    -- concurrent clocks at the head, such that all of them compare
+    -- equally with each other; i.e. stop accumulating the equivalence
+    -- class once a smaller entry is discovered
+    equiv = go [head sortedXs'] $ tail sortedXs'
+      where
+          go accum [] = accum
+          go accum (y:ys)
+            | any (y <) accum = accum       -- terminate
+            | otherwise = go (y:accum) ys   -- accumulate
 
 mergeNSets :: NValueSet -> NValueSet -> NValueSet
 mergeNSets = (\a b -> bestNSubset $ nub (a ++ b))
