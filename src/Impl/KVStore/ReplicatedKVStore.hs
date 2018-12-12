@@ -17,10 +17,8 @@ import           Data.Map             as Map (Map (..), empty,
                                               fromList, insertWith,
                                               lookup, unionWith)
 
-import           Data.Coerce          (coerce)
-import           Data.List            (minimumBy, nub, nubBy, sort,
-                                       sortBy)
-import           Data.Ord             (Down (..), comparing)
+import           Data.List            (minimumBy, nub, nubBy)
+import           Data.Ord             (comparing)
 
 type PValue v = (Pid, Clock, v)--P-set{key} is a collection of this value-type
 type NValue   = Clock          --N-set{key} is a collection of this value-type
@@ -162,51 +160,27 @@ instance Ord k => DeltaCvRDT (ReplicatedKVStore k v) where
         entry  = [clock']
         nSet   = Map.fromList [(key, entry)]
 
+-- We arrive at the best equivalence class by filtering away any
+-- elements which are larger than another element in the input set.
 bestPSubset :: PValueSet v -> PValueSet v
-bestPSubset xs = equiv
+bestPSubset xs = filter (\x -> not (isLessThanSomethingElse x)) xs
   where
-    -- coerce clocks as Down to get a reversed comparison function
-    toDown               = (\(pid, c, v) -> (pid, Down c, v))
-    fromDown             = (\(pid, Down c, v) -> (pid, c, v))
-    downXs               = map toDown xs
-    sortedXs             = sortBy (comparing (\(_, c, _) -> c)) downXs
-    sortedXs'            = map fromDown sortedXs
-    (_, firstBestClk, _) = head sortedXs' -- first of the latest clocks
-
-    -- from the down-sorted list, find the equivalence class of
-    -- concurrent clocks at the head, such that all of them compare
-    -- equally with each other; i.e. stop accumulating the equivalence
-    -- class once a smaller entry is discovered
-    equiv = go [head sortedXs'] $ tail sortedXs'
-      where
-          go accum [] = accum
-          go accum (y@(_, clky, _):ys)
-            | any (\(_, clkx, _) -> clky < clkx) accum = accum -- terminate
-            | otherwise = go (y:accum) ys   -- accumulate
+    toClock = (\(_, c, _) -> c)
+    isLessThanSomethingElse elem =
+        any (toClock (elem) <) $ toClock <$> xs
 
 mergePSets :: PValueSet v -> PValueSet v -> PValueSet v
-mergePSets = (\a b -> bestPSubset $ nubBy equal (a ++ b))
+mergePSets as bs = result
     where equal (p1, c1, _) (p2, c2, _) = (p1 == p2) && (c1 == c2)
+          result = bestPSubset $ nubBy equal (as ++ bs)
 
+-- We arrive at the best equivalence class by filtering away any
+-- elements which are larger than another element in the input set.
 bestNSubset :: NValueSet -> NValueSet
-bestNSubset xs = equiv
-    -- coerce clocks as Down to get a reversed comparison function
+bestNSubset xs = bestEquivalence
   where
-    downXs       = map Down xs
-    sortedXs     = sort downXs
-    sortedXs'    = map (\ (Down x) -> x) sortedXs
-    firstBestClk = head sortedXs' -- first of the latest clocks
-
-    -- from the down-sorted list, find the equivalence class of
-    -- concurrent clocks at the head, such that all of them compare
-    -- equally with each other; i.e. stop accumulating the equivalence
-    -- class once a smaller entry is discovered
-    equiv = go [head sortedXs'] $ tail sortedXs'
-      where
-          go accum [] = accum
-          go accum (y:ys)
-            | any (y <) accum = accum       -- terminate
-            | otherwise = go (y:accum) ys   -- accumulate
+    bestEquivalence = filter (\x -> not (isLessThanSomethingElse x)) xs
+    isLessThanSomethingElse elem = any (elem <) xs
 
 mergeNSets :: NValueSet -> NValueSet -> NValueSet
-mergeNSets = (\a b -> bestNSubset $ nub (a ++ b))
+mergeNSets as bs = bestNSubset $ nub (as ++ bs)

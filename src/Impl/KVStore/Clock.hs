@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE InstanceSigs         #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-module Impl.KVStore.Clock (Clock, singleton, increment) where
+module Impl.KVStore.Clock (Clock, singleton, increment, fromList) where
 
 import           Impl.KVStore.Pid
 
@@ -11,13 +11,17 @@ import           Algebra.Lattice  (BoundedJoinSemiLattice (..),
                                    MeetSemiLattice (..))
 import qualified Data.VectorClock as VC (Relation (..),
                                          VectorClock (..), combine,
-                                         empty, incWithDefault, max,
+                                         empty, fromList,
+                                         incWithDefault, max,
                                          relation, singleton)
 
 import           Data.Word        (Word64)
 
 type EventCounter = Word64
 type Clock  = VC.VectorClock Pid EventCounter
+
+fromList :: [(Pid, EventCounter)] -> Clock
+fromList = VC.fromList
 
 instance JoinSemiLattice Clock where
     (\/) :: Clock -> Clock -> Clock
