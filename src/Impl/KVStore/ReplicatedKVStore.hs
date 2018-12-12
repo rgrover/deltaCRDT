@@ -1,3 +1,8 @@
+-- This is an implementation of the Add-Wins Observed Remove set based
+-- on the DeltaCvRDT library. This implementation demonstrates that
+-- the CvRDT library can be used in a generic manner to suit
+-- application specific policies. There is an accompanying QuickCheck
+-- based test spec to exercise this CRDT.
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE InstanceSigs        #-}
 {-# LANGUAGE ScopedTypeVariables #-}

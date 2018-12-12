@@ -1,5 +1,8 @@
 {-# LANGUAGE TemplateHaskell #-}
-module SimulatedConcurrency (runTests) where
+
+module SimulatedConcurrency
+    ( runTests
+    ) where
 
 import           CRDT.CRDT
 
@@ -105,7 +108,7 @@ applyAction stateMap action =
 --   * test that all replicas have consistent values for all keys. We've
 --     deliberately chosen keys from a small set to simplify validation.
 prop_arbitraryOperationsSimulatingConcurrency =
-    forAll (scale (* 1) (arbitrary :: Gen [Action])) $ \actions ->
+    forAll (scale (* 20) (arbitrary :: Gen [Action])) $ \actions ->
         not (null actions) ==>
         let
             pids = P <$> [0 .. (numReplicas - 1)]
@@ -121,7 +124,6 @@ prop_arbitraryOperationsSimulatingConcurrency =
             -- deltas at the end.
             syncs :: [Action]
             syncs = [Message s r | s <- pids, r <- pids, s /= r]
-            --syncs = [Message s r | s <- (P <$> [0..2]), r <- pids, s /= r]
             states'' = foldl' applyAction states' syncs
 
             statesAsList :: [Replica]
@@ -132,7 +134,6 @@ prop_arbitraryOperationsSimulatingConcurrency =
               where
                 values = (flip query key) <$> statesAsList
         in all valuesMatchFor [1 .. 31]
-        --in trace (show (statesAsList !! 0)) $ False
 
 --------------------------
 return []
